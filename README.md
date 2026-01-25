@@ -34,14 +34,18 @@ https://github.com/JasonYANG170/LTE&SMS-Gateway
 
 
 #### 软件部署
-1. 调试部署较为简单，先使用`cd`指令进入项目目录  
-2. 安装服务器环境  
+1. 调试部署较为简单，先使用`cd`指令进入项目目录
+2. 安装服务器环境
 ```
 sudo apt update
 sudo apt install nodejs
 npm install
 ```
-3. 启动  
+3. 如果是www用户启动服务器，则需要为www加入dialout组，否则无UART访问权限
+```
+usermod -aG dialout www
+```
+4. 启动，检查服务日志，是否成功向UART发送数据
 ```
 npm start
 ```
