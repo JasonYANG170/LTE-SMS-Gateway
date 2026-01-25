@@ -41,15 +41,30 @@ sudo apt update
 sudo apt install nodejs
 npm install
 ```
-3. 如果是www用户启动服务器，则需要为www加入dialout组，否则无UART访问权限
+1. 调试部署较为简单，先使用`cd`指令进入项目目录
+2. 安装服务器环境
 ```
-usermod -aG dialout www
+sudo apt update
+sudo apt install nodejs
+npm install
 ```
-4. 分配组后建议重启设备或注销用户重新登录
-```
-sudo reboot
-```
-5. 启动，检查服务日志，是否成功向UART发送数据
+3. 串口权限 
+    **3.1 通过加入dialout获取权限(推荐)**
+    3.1.1 如果是www用户启动服务器，则需要为www加入dialout组，否则无UART访问权限
+    ```
+    usermod -aG dialout www
+    ```
+    3.1.2 分配组后建议重启设备或注销用户重新登录
+   
+    ```
+    sudo reboot
+    ```
+    **3.2 通过修改UART权限**
+    3.2.1 如果3.1设置无效，则可以通过3.2开放串口权限
+    ```
+    sudo chmod 666 /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyACM3
+    ```
+4. 启动，检查服务日志，是否成功向UART发送数据
 ```
 npm start
 ```
