@@ -471,10 +471,18 @@ function showSettings(port, moduleIndex) {
               style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
           </div>
           
+          <div style="margin-bottom: 12px;">
+            <button class="send-button" onclick="testHttpForward('${port}')" style="background: #3b82f6; width: 100%;">
+              🧪 测试 HTTP 转发
+            </button>
+            <div id="httpTestResult" style="margin-top: 8px;"></div>
+          </div>
+          
           <div style="background: #eff6ff; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #1e40af;">
             <strong>说明:</strong><br>
             • GET模式: 直接请求URL，{sms} 会被替换为短信内容<br>
-            • POST模式: 自动将URL参数转换为POST body发送
+            • POST模式: token 参数保留在 URL 中，其他参数转换为 POST body 发送<br>
+            • 测试按钮: 发送测试消息 "测试短信内容" 到配置的 URL
           </div>
         </div>
         
@@ -548,6 +556,85 @@ async function saveSettings(port, moduleIndex) {
     }
   } catch (error) {
     status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${error.message}</p>`;
+  }
+}
+
+// 测试 HTTP 转发
+async function testHttpForward(port) {
+  const httpUrl = document.getElementById('httpUrl').value;
+  const httpMethod = document.getElementById('httpMethod').value;
+  const resultDiv = document.getElementById('httpTestResult');
+  
+  if (!httpUrl) {
+    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先输入 URL 地址</p>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color: #10b981;">🧪 测试中...</p>';
+  
+  try {
+    // 通过服务器端代理发送请求，避免 CORS 问题
+    const response = await fetch('/api/test-http-forward', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: httpUrl,
+        method: httpMethod
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      resultDiv.innerHTML = `
+        <div style="background: #d1fae5; padding: 10px; border-radius: 6px; border-left: 4px solid #10b981;">
+          <p style="color: #065f46; margin: 0; font-weight: 600;">✓ 测试成功</p>
+          <p style="color: #065f46; margin: 4px 0 0 0; font-size: 0.85em;">
+            状态码: ${result.status} ${result.statusText}<br>
+            响应时间: ${result.duration}ms<br>
+            请求方式: ${result.method}<br>
+            测试消息: ${result.testMessage}
+          </p>
+          ${result.responseText ? `
+            <details style="margin-top: 8px;">
+              <summary style="cursor: pointer; color: #065f46; font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #065f46;">${escapeHtml(result.responseText)}</pre>
+            </details>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      const errorMsg = result.error || '请求失败';
+      resultDiv.innerHTML = `
+        <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+          <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
+          <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+            ${result.status ? `状态码: ${result.status} ${result.statusText}<br>响应时间: ${result.duration}ms<br>` : ''}
+            错误: ${errorMsg}<br>
+            ${errorMsg === 'fetch failed' || errorMsg.includes('ENOTFOUND') ? '提示: 请检查 URL 是否正确，服务器是否可访问' : ''}
+            ${errorMsg.includes('ECONNREFUSED') ? '提示: 服务器拒绝连接，请检查服务是否运行' : ''}
+          </p>
+          ${result.responseText ? `
+            <details style="margin-top: 8px;">
+              <summary style="cursor: pointer; color: #991b1b; font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #991b1b;">${escapeHtml(result.responseText)}</pre>
+            </details>
+          ` : ''}
+        </div>
+      `;
+    }
+  } catch (error) {
+    resultDiv.innerHTML = `
+      <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+        <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
+        <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+          错误: ${error.message}<br>
+          请检查网络连接或联系管理员
+        </p>
+      </div>
+    `;
   }
 }
 
@@ -768,7 +855,7 @@ async function showSystemSettings() {
             <strong>说明:</strong><br>
             • {login} 会被替换为: "登录失败 - IP: xxx, 用户名: xxx, 错误: xxx, 时间: xxx"<br>
             • GET模式: 直接请求URL<br>
-            • POST模式: 自动将URL参数转换为POST body发送
+            • POST模式: token 参数保留在 URL 中，其他参数转换为 POST body 发送
           </div>
           
           <button class="send-button" onclick="updateNotificationConfig()">保存通知设置</button>

@@ -360,6 +360,86 @@ app.get('/api/login-logs', requireAuth, (req, res) => {
   }
 });
 
+// 测试 HTTP 转发API
+app.post('/api/test-http-forward', requireAuth, async (req, res) => {
+  const { url, method } = req.body;
+  
+  if (!url) {
+    return res.json({ success: false, error: 'URL 不能为空' });
+  }
+  
+  try {
+    const testMessage = '测试短信内容 - Test SMS Content';
+    const testUrl = url.replace('{sms}', encodeURIComponent(testMessage));
+    
+    console.log(`测试 HTTP 转发: ${method} ${testUrl}`);
+    
+    const startTime = Date.now();
+    let response;
+    
+    if (method === 'GET') {
+      // GET 请求
+      response = await fetch(testUrl);
+    } else {
+      // POST 请求 - token 保留在 URL 中，其他参数放到 body
+      const urlObj = new URL(testUrl);
+      const params = new URLSearchParams();
+      const tokenParam = urlObj.searchParams.get('token');
+      
+      // 构建新的 URL，只保留 token 参数
+      const postUrl = `${urlObj.origin}${urlObj.pathname}${tokenParam ? '?token=' + tokenParam : ''}`;
+      
+      // 其他参数放到 body 中
+      urlObj.searchParams.forEach((value, key) => {
+        if (key !== 'token') {
+          params.append(key, value);
+        }
+      });
+      
+      response = await fetch(postUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      });
+    }
+    
+    const duration = Date.now() - startTime;
+    
+    // 尝试读取响应内容
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch (e) {
+      responseText = '无法读取响应内容';
+    }
+    
+    // 确保 responseText 不是 undefined
+    if (!responseText) {
+      responseText = '';
+    }
+    
+    console.log(`HTTP 转发测试完成: ${response.status} ${response.statusText} (${duration}ms)`);
+    
+    res.json({
+      success: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      duration: duration,
+      method: method,
+      testMessage: testMessage,
+      responseText: responseText.substring(0, 500) // 限制响应长度
+    });
+  } catch (error) {
+    console.error('HTTP 转发测试失败:', error.message);
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // 清空登录日志API
 app.post('/api/clear-login-logs', requireAuth, (req, res) => {
   try {
@@ -705,19 +785,27 @@ async function forwardMessage(portPath, message) {
         const response = await fetch(url);
         console.log(`${portPath} HTTP转发成功 (GET): ${response.status}`);
       } else {
-        // POST请求 - 将URL参数转换为body
+        // POST请求 - token 保留在 URL 中，其他参数放到 body
         const urlObj = new URL(url);
-        const params = {};
+        const params = new URLSearchParams();
+        const tokenParam = urlObj.searchParams.get('token');
+        
+        // 构建新的 URL，只保留 token 参数
+        const postUrl = `${urlObj.origin}${urlObj.pathname}${tokenParam ? '?token=' + tokenParam : ''}`;
+        
+        // 其他参数放到 body 中
         urlObj.searchParams.forEach((value, key) => {
-          params[key] = value;
+          if (key !== 'token') {
+            params.append(key, value);
+          }
         });
         
-        const response = await fetch(urlObj.origin + urlObj.pathname, {
+        const response = await fetch(postUrl, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/x-www-form-urlencoded'
           },
-          body: JSON.stringify(params)
+          body: params.toString()
         });
         console.log(`${portPath} HTTP转发成功 (POST): ${response.status}`);
       }
