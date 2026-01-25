@@ -49,7 +49,7 @@ sudo apt install nodejs
 npm install
 ```
 3. 串口权限 
-    **3.1 通过加入dialout获取权限(推荐)**
+    **3.1 通过加入dialout获取权限(推荐)**  
     3.1.1 如果是www用户启动服务器，则需要为www加入dialout组，否则无UART访问权限
     ```
     usermod -aG dialout www
@@ -59,7 +59,7 @@ npm install
     ```
     sudo reboot
     ```
-    **3.2 通过修改UART权限**
+    **3.2 通过修改UART权限**  
     3.2.1 如果3.1设置无效，则可以通过3.2开放串口权限
     ```
     sudo chmod 666 /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2 /dev/ttyACM3
