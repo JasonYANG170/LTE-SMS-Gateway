@@ -45,7 +45,11 @@ npm install
 ```
 usermod -aG dialout www
 ```
-4. 启动，检查服务日志，是否成功向UART发送数据
+4. 分配组后建议重启设备或注销用户重新登录
+```
+sudo reboot
+```
+5. 启动，检查服务日志，是否成功向UART发送数据
 ```
 npm start
 ```
