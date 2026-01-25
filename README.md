@@ -58,6 +58,8 @@ npm start
 | 转发设置 | 收件测试 |
 |<img width="2305" height="1384" alt="image" src="https://github.com/user-attachments/assets/12e03d5d-987f-4c05-ad3a-a40a5913d806" />|<img width="1925" height="1214" alt="image" src="https://github.com/user-attachments/assets/1645c3fe-86cf-4bfc-8914-8c1a0a65c169" />|
 ## 硬件
+**立创硬件开源平台**
+https://oshwhub.com/jasonyang17/sms-receive
 #### 项目参数
 
 * 本设计采用AIR780E模组，以实现LTE功能支持；
@@ -82,5 +84,5 @@ npm start
 
 ## 喜欢这个项目，请为我点个Star ⭐
 
-[![Star History Chart](https://api.star-history.com/svg?JasonYANG170/LTE-SMS-Gateway&amp;type=Date)](https://star-history.com/#star-history/star-history&amp;Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=JasonYANG170/LTE-SMS-Gateway&amp;type=Date)](https://star-history.com/#star-history/star-history&amp;Date)
 
