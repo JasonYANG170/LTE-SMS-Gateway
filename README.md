@@ -3,11 +3,12 @@
 
 
 
-![Static Badge](https://img.shields.io/badge/License-CC_BY_NC_SA_4.0-green?style=for-the-badge)![Commit Activity](https://img.shields.io/github/commit-activity/w/JasonYANG170/LTE&amp;SMS-Gateway?style=for-the-badge&amp;color=yellow)![Languages Count](https://img.shields.io/github/languages/count/JasonYANG170/LTE&amp;SMS-Gateway?logo=c&amp;style=for-the-badge)
+![Static Badge](https://img.shields.io/badge/License-CC_BY_NC_SA_4.0-green?style=for-the-badge)![Commit Activity](https://img.shields.io/github/commit-activity/w/JasonYANG170/LTE-SMS-Gateway?style=for-the-badge&amp;color=yellow)![Languages Count](https://img.shields.io/github/languages/count/JasonYANG170/LTE-SMS-Gateway?logo=javascript&amp;style=for-the-badge)
 [![Discord](https://img.shields.io/discord/978108215499816980?style=social&amp;logo=discord&amp;label=echosec)](https://discord.com/invite/az3ceRmgVe)
 
 
-![0ef1fe201f54697f66c67139923d5d60.jpg](https://image.lceda.cn/oshwhub/pullImage/53cce9ab3de744f28ccdb2b11234bf31.jpg)
+<img width="1700" height="1280" alt="image" src="https://github.com/user-attachments/assets/28eea641-fe03-4b4b-b582-2b067d470d70" />
+
 这是一项基于Cat.1模组的LTE&amp;SMS多路聚合网关
 
 </div>
@@ -53,9 +54,9 @@ npm start
 
 | 登录界面 | 主页 |
 | --- | --- |
-|![image.png](https://image.lceda.cn/oshwhub/pullImage/87133ac95b8e41398f765b9f1a331639.png)|![image.png](https://image.lceda.cn/oshwhub/pullImage/e537a8b323284c21be24d5058ff1bcb3.png)|
+|<img width="2217" height="1379" alt="image" src="https://github.com/user-attachments/assets/69941b26-9220-441a-a4b1-2f6c5db4ff80" />|<img width="2316" height="1397" alt="image" src="https://github.com/user-attachments/assets/1d658aa1-c71f-4181-b173-c14aaa24d46b" />|
 | 转发设置 | 收件测试 |
-|![image.png](https://image.lceda.cn/oshwhub/pullImage/279bd42fb4904d08a53b4ef2bb79a78f.png)|![image.png](https://image.lceda.cn/oshwhub/pullImage/668c1cf2c9694143a3adacfb7e6c0cbe.png)|
+|<img width="2305" height="1384" alt="image" src="https://github.com/user-attachments/assets/12e03d5d-987f-4c05-ad3a-a40a5913d806" />|<img width="1925" height="1214" alt="image" src="https://github.com/user-attachments/assets/1645c3fe-86cf-4bfc-8914-8c1a0a65c169" />|
 ## 硬件
 #### 项目参数
 
@@ -75,11 +76,11 @@ npm start
 
 | 正面 | RNDIS测试 |
 | --- | --- |
-|![7f645753615a6345927f9b2dd5b5d8d8.jpg](https://image.lceda.cn/oshwhub/pullImage/3d491ea0a2ce439183a94aa67f02ae6f.jpg)|![0b15aaa6dd7369cf497c72ba46678eb4.jpg](https://image.lceda.cn/oshwhub/pullImage/86e36b73dbaa41cc8f1aa0d1dbac2ab5.jpg)|
+|<img width="1700" height="1280" alt="image" src="https://github.com/user-attachments/assets/ce354ff9-cf8d-4729-8556-6dde2541d38d" />|<img width="1700" height="1280" alt="image" src="https://github.com/user-attachments/assets/6b2a8717-c24c-42f0-9671-a836291a1d25" />|
 | 外壳内部 | 成品 |
-|![0ef1fe201f54697f66c67139923d5d60.jpg](https://image.lceda.cn/oshwhub/pullImage/556e15e476d24ac4a686f3f2df596faa.jpg)|![a5851492efcea274ff404c2faea9e9c4.jpg](https://image.lceda.cn/oshwhub/pullImage/861699cd3bed4281a44ce03cee17b3e2.jpg)|
+|<img width="1700" height="1280" alt="image" src="https://github.com/user-attachments/assets/dbdcdb87-cc00-4201-a84f-4efd3f3aef0e" />|<img width="1700" height="1280" alt="image" src="https://github.com/user-attachments/assets/969658db-7386-47db-b881-036d9f3c5c5c" />|
 
 ## 喜欢这个项目，请为我点个Star ⭐
 
-[![Star History Chart](https://api.star-history.com/svg?JasonYANG170/LTE&amp;SMS-Gateway&amp;type=Date)](https://star-history.com/#star-history/star-history&amp;Date)
+[![Star History Chart](https://api.star-history.com/svg?JasonYANG170/LTE-SMS-Gateway&amp;type=Date)](https://star-history.com/#star-history/star-history&amp;Date)
 
