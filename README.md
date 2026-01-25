@@ -27,29 +27,31 @@
 本项目无内置MCU，须搭配Linux上位机或NAS服务器使用
 如遇问题，请向我提出issues
 ## 软件
-**LTE&SMS聚合网关管理面板：** 
-https://github.com/JasonYANG170/LTE&SMS-Gateway
-本项目管理后台基于NodeJS开发，适用于基于Linux系统的服务器使用
+**LTE&SMS聚合网关管理面板：**   
+https://github.com/JasonYANG170/LTE&SMS-Gateway  
+本项目管理后台基于NodeJS开发，适用于基于Linux系统的服务器使用  
 服务器部署后进入本地5823端口打开管理后台
 
 
 #### 软件部署
-1. 调试部署较为简单，先使用`cd`指令进入项目目录
-2. 安装服务器环境
+1. 调试部署较为简单，先使用`cd`指令进入项目目录  
+2. 安装服务器环境  
 ```
 sudo apt update
 sudo apt install nodejs
 npm install
 ```
-3. 启动
+3. 启动  
 ```
 npm start
 ```
 #### 默认配置
-服务端口：`5823`
-账户：`root`
-密码：`password`
+
+服务端口：`5823`  
+账户：`root`  
+密码：`password`  
 如有外部访问需求，可使用Nginx添加反代
+
 #### 后台界面图
 
 | 登录界面 | 主页 |
@@ -70,8 +72,8 @@ https://oshwhub.com/jasonyang17/sms-receive
 本项目建议电源供应12V5A DC电源
 
 ## 开源协议
-本项目遵循CC BY-NC-SA 4.0开源协议，使用本程序时请注明出处
-本项目仅供研究与学习，严禁非授权的商业获利，严禁用于违法违规用途  
+本项目遵循CC BY-NC-SA 4.0开源协议，使用本程序时请注明出处  
+本项目仅供研究与学习，严禁非授权的商业获利，严禁用于违法违规用途    
 如果您有更好的建议，欢迎PR
 
 ## 硬件实物图
