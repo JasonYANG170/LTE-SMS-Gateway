@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 5823;
+const PORT = 5761;
 
 // 解析JSON请求体
 app.use(express.json());
@@ -28,6 +28,7 @@ app.use(session({
 const CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
 const LOGIN_LOG_FILE = path.join(__dirname, 'login.log');
 const NOTIFICATION_CONFIG_FILE = path.join(__dirname, 'notification.json');
+const MODULE_SETTINGS_FILE = path.join(__dirname, 'module-settings.json');
 const ENCRYPTION_KEY = crypto.scryptSync('lte-gateway-encryption-key', 'salt', 32);
 const IV_LENGTH = 16;
 
@@ -174,6 +175,72 @@ function saveNotificationConfig(config) {
   }
 }
 
+// 初始化模块设置文件
+function initModuleSettings() {
+  if (!fs.existsSync(MODULE_SETTINGS_FILE)) {
+    const defaultSettings = {};
+    fs.writeFileSync(MODULE_SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
+    console.log('已创建默认模块设置文件');
+  }
+}
+
+// 读取模块设置
+function getModuleSettings() {
+  try {
+    const data = fs.readFileSync(MODULE_SETTINGS_FILE, 'utf8');
+    const encryptedSettings = JSON.parse(data);
+    
+    // 解密敏感字段
+    const decryptedSettings = {};
+    for (const [port, settings] of Object.entries(encryptedSettings)) {
+      decryptedSettings[port] = {
+        ...settings,
+        httpUrl: settings.httpUrl ? decrypt(settings.httpUrl) || '' : '',
+        smsTarget: settings.smsTarget ? decrypt(settings.smsTarget) || '' : ''
+      };
+    }
+    
+    return decryptedSettings;
+  } catch (error) {
+    console.error('读取模块设置失败:', error.message);
+    return {};
+  }
+}
+
+// 保存模块设置
+function saveModuleSettings(settings) {
+  try {
+    // 加密敏感字段
+    const encryptedSettings = {};
+    for (const [port, setting] of Object.entries(settings)) {
+      encryptedSettings[port] = {
+        ...setting,
+        httpUrl: setting.httpUrl ? encrypt(setting.httpUrl) : '',
+        smsTarget: setting.smsTarget ? encrypt(setting.smsTarget) : ''
+      };
+    }
+    
+    fs.writeFileSync(MODULE_SETTINGS_FILE, JSON.stringify(encryptedSettings, null, 2));
+    console.log('模块设置已保存（敏感字段已加密）');
+    return true;
+  } catch (error) {
+    console.error('保存模块设置失败:', error.message);
+    return false;
+  }
+}
+
+// 保存单个模块的设置
+function saveModuleSetting(port, forwardSettings) {
+  try {
+    const allSettings = getModuleSettings();
+    allSettings[port] = forwardSettings;
+    return saveModuleSettings(allSettings);
+  } catch (error) {
+    console.error(`保存 ${port} 设置失败:`, error.message);
+    return false;
+  }
+}
+
 // 发送登录失败通知
 async function sendLoginFailureNotification(ip, username, error) {
   const config = getNotificationConfig();
@@ -196,19 +263,30 @@ async function sendLoginFailureNotification(ip, username, error) {
       const response = await fetch(url);
       console.log(`通知发送成功 (GET): ${response.status}`);
     } else {
-      // POST 请求 - 将 URL 参数转换为 body
+      // POST 请求 - token 保留在 URL 中，其他参数放到 body
       const urlObj = new URL(url);
-      const params = {};
+      const tokenParam = urlObj.searchParams.get('token');
+      
+      // 构建新的 URL，只保留 token 参数
+      const postUrl = `${urlObj.origin}${urlObj.pathname}${tokenParam ? '?token=' + tokenParam : ''}`;
+      
+      // 收集其他参数，将数字字符串转换为整数
+      const bodyParams = {};
       urlObj.searchParams.forEach((value, key) => {
-        params[key] = value;
+        if (key !== 'token') {
+          // 尝试将数字字符串转换为整数（如 priority）
+          const numValue = parseInt(value, 10);
+          bodyParams[key] = !isNaN(numValue) && value.trim() === numValue.toString() ? numValue : value;
+        }
       });
       
-      const response = await fetch(urlObj.origin + urlObj.pathname, {
+      // 对于 Gotify，使用 JSON 格式
+      const response = await fetch(postUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(params)
+        body: JSON.stringify(bodyParams)
       });
       console.log(`通知发送成功 (POST): ${response.status}`);
     }
@@ -219,6 +297,9 @@ async function sendLoginFailureNotification(ip, username, error) {
 
 // 初始化通知配置
 initNotificationConfig();
+
+// 初始化模块设置
+initModuleSettings();
 
 // 认证中间件
 function requireAuth(req, res, next) {
@@ -383,25 +464,28 @@ app.post('/api/test-http-forward', requireAuth, async (req, res) => {
     } else {
       // POST 请求 - token 保留在 URL 中，其他参数放到 body
       const urlObj = new URL(testUrl);
-      const params = new URLSearchParams();
       const tokenParam = urlObj.searchParams.get('token');
       
       // 构建新的 URL，只保留 token 参数
       const postUrl = `${urlObj.origin}${urlObj.pathname}${tokenParam ? '?token=' + tokenParam : ''}`;
       
-      // 其他参数放到 body 中
+      // 收集其他参数，将数字字符串转换为整数
+      const bodyParams = {};
       urlObj.searchParams.forEach((value, key) => {
         if (key !== 'token') {
-          params.append(key, value);
+          // 尝试将数字字符串转换为整数（如 priority）
+          const numValue = parseInt(value, 10);
+          bodyParams[key] = !isNaN(numValue) && value.trim() === numValue.toString() ? numValue : value;
         }
       });
       
+      // 对于 Gotify，使用 JSON 格式
       response = await fetch(postUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/json'
         },
-        body: params.toString()
+        body: JSON.stringify(bodyParams)
       });
     }
     
@@ -433,6 +517,89 @@ app.post('/api/test-http-forward', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('HTTP 转发测试失败:', error.message);
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 测试登录通知API
+app.post('/api/test-login-notification', requireAuth, async (req, res) => {
+  const { url, method } = req.body;
+  
+  if (!url) {
+    return res.json({ success: false, error: 'URL 不能为空' });
+  }
+  
+  try {
+    const testMessage = '登录失败 - IP: 192.168.1.100, 用户名: testuser, 错误: 测试通知, 时间: ' + new Date().toISOString();
+    const testUrl = url.replace('{login}', encodeURIComponent(testMessage));
+    
+    console.log(`测试登录通知: ${method} ${testUrl}`);
+    
+    const startTime = Date.now();
+    let response;
+    
+    if (method === 'GET') {
+      // GET 请求
+      response = await fetch(testUrl);
+    } else {
+      // POST 请求 - token 保留在 URL 中，其他参数放到 body
+      const urlObj = new URL(testUrl);
+      const tokenParam = urlObj.searchParams.get('token');
+      
+      // 构建新的 URL，只保留 token 参数
+      const postUrl = `${urlObj.origin}${urlObj.pathname}${tokenParam ? '?token=' + tokenParam : ''}`;
+      
+      // 收集其他参数，将数字字符串转换为整数
+      const bodyParams = {};
+      urlObj.searchParams.forEach((value, key) => {
+        if (key !== 'token') {
+          // 尝试将数字字符串转换为整数（如 priority）
+          const numValue = parseInt(value, 10);
+          bodyParams[key] = !isNaN(numValue) && value.trim() === numValue.toString() ? numValue : value;
+        }
+      });
+      
+      // 对于 Gotify，使用 JSON 格式
+      response = await fetch(postUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(bodyParams)
+      });
+    }
+    
+    const duration = Date.now() - startTime;
+    
+    // 尝试读取响应内容
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch (e) {
+      responseText = '无法读取响应内容';
+    }
+    
+    // 确保 responseText 不是 undefined
+    if (!responseText) {
+      responseText = '';
+    }
+    
+    console.log(`登录通知测试完成: ${response.status} ${response.statusText} (${duration}ms)`);
+    
+    res.json({
+      success: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      duration: duration,
+      method: method,
+      testMessage: testMessage,
+      responseText: responseText.substring(0, 500) // 限制响应长度
+    });
+  } catch (error) {
+    console.error('登录通知测试失败:', error.message);
     res.json({
       success: false,
       error: error.message
@@ -778,7 +945,10 @@ async function forwardMessage(portPath, message) {
     try {
       const url = settings.httpUrl.replace('{sms}', encodeURIComponent(message.content));
       
-      console.log(`${portPath} HTTP转发: ${url}`);
+      // 隐藏 URL 中的敏感信息（token）
+      const urlObj = new URL(url);
+      const safeUrl = `${urlObj.origin}${urlObj.pathname}${urlObj.searchParams.has('token') ? '?token=***' : ''}`;
+      console.log(`${portPath} HTTP转发: ${safeUrl}`);
       
       if (settings.httpMethod === 'GET') {
         // GET请求
@@ -787,25 +957,28 @@ async function forwardMessage(portPath, message) {
       } else {
         // POST请求 - token 保留在 URL 中，其他参数放到 body
         const urlObj = new URL(url);
-        const params = new URLSearchParams();
         const tokenParam = urlObj.searchParams.get('token');
         
         // 构建新的 URL，只保留 token 参数
         const postUrl = `${urlObj.origin}${urlObj.pathname}${tokenParam ? '?token=' + tokenParam : ''}`;
         
-        // 其他参数放到 body 中
+        // 收集其他参数，将数字字符串转换为整数
+        const bodyParams = {};
         urlObj.searchParams.forEach((value, key) => {
           if (key !== 'token') {
-            params.append(key, value);
+            // 尝试将数字字符串转换为整数（如 priority）
+            const numValue = parseInt(value, 10);
+            bodyParams[key] = !isNaN(numValue) && value.trim() === numValue.toString() ? numValue : value;
           }
         });
         
+        // 对于 Gotify，使用 JSON 格式
         const response = await fetch(postUrl, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Content-Type': 'application/json'
           },
-          body: params.toString()
+          body: JSON.stringify(bodyParams)
         });
         console.log(`${portPath} HTTP转发成功 (POST): ${response.status}`);
       }
@@ -834,7 +1007,19 @@ async function forwardMessage(portPath, message) {
 
 // 初始化所有模块的监听
 function initializeModuleListeners() {
+  // 加载保存的模块设置
+  const savedSettings = getModuleSettings();
+  
   ports.forEach(portPath => {
+    // 获取该模块保存的设置，如果没有则使用默认值
+    const savedForwardSettings = savedSettings[portPath] || {
+      httpEnabled: false,
+      httpUrl: '',
+      httpMethod: 'GET',
+      smsEnabled: false,
+      smsTarget: ''
+    };
+    
     moduleStates[portPath] = {
       port: portPath,
       status: 'unknown',
@@ -857,15 +1042,11 @@ function initializeModuleListeners() {
         rssi: null,
         ber: null
       },
-      forwardSettings: {
-        httpEnabled: false,
-        httpUrl: '',
-        httpMethod: 'GET',
-        smsEnabled: false,
-        smsTarget: ''
-      },
+      forwardSettings: savedForwardSettings, // 使用保存的设置
       multipartMessages: {} // 存储长短信片段
     };
+    
+    console.log(`${portPath} 已加载转发设置 (HTTP: ${savedForwardSettings.httpEnabled ? '启用' : '禁用'}, SMS: ${savedForwardSettings.smsEnabled ? '启用' : '禁用'})`);
     
     // 启动监听
     startPortListener(portPath);
@@ -1116,11 +1297,11 @@ function startPortListener(portPath) {
           if (initStep === 0.5 && line.includes('OK')) {
             // PDU模式设置成功
             initStep = 1;
-            setTimeout(() => sendCommand(portPath, 'AT'), 300);
+            setTimeout(() => sendCommand(portPath, 'AT'), 100);
           } else if (initStep === 1 && line.includes('OK')) {
             moduleStates[portPath].moduleDetected = true;
             initStep = 2;
-            setTimeout(() => sendCommand(portPath, 'AT+ICCID'), 300);
+            setTimeout(() => sendCommand(portPath, 'AT+ICCID'), 100);
           } else if (initStep === 2) {
             if (line.includes('+ICCID:')) {
               const match = line.match(/\+ICCID:\s*(\d+)/);
@@ -1130,7 +1311,7 @@ function startPortListener(portPath) {
             } else if (line.includes('OK')) {
               moduleStates[portPath].simDetected = true;
               initStep = 3;
-              setTimeout(() => sendCommand(portPath, 'AT+CGSN'), 300);
+              setTimeout(() => sendCommand(portPath, 'AT+CGSN'), 100);
             }
           } else if (initStep === 3) {
             const imeiMatch = line.match(/^(\d{15})$/);
@@ -1139,16 +1320,16 @@ function startPortListener(portPath) {
             } else if (line.includes('OK')) {
               initStep = 4;
               // 设置短信通知模式
-              setTimeout(() => sendCommand(portPath, 'AT+CNMI=2,1,0,0,0'), 300);
+              setTimeout(() => sendCommand(portPath, 'AT+CNMI=2,1,0,0,0'), 100);
             }
           } else if (initStep === 4 && line.includes('OK')) {
             initStep = 5;
             // 设置短信存储位置为SIM卡
-            setTimeout(() => sendCommand(portPath, 'AT+CPMS="SM","SM","SM"'), 300);
+            setTimeout(() => sendCommand(portPath, 'AT+CPMS="SM","SM","SM"'), 100);
           } else if (initStep === 5 && line.includes('OK')) {
             initStep = 6;
             // 查询运营商信息
-            setTimeout(() => sendCommand(portPath, 'AT+COPS?'), 300);
+            setTimeout(() => sendCommand(portPath, 'AT+COPS?'), 100);
           } else if (initStep === 6) {
             if (line.includes('+COPS:')) {
               // 解析运营商信息: +COPS: <mode>[,<format>,<oper>[,<AcT>]]
@@ -1167,7 +1348,7 @@ function startPortListener(portPath) {
             if (line.includes('OK') || line.includes('ERROR')) {
               initStep = 7;
               // 查询信号强度
-              setTimeout(() => sendCommand(portPath, 'AT+CSQ'), 300);
+              setTimeout(() => sendCommand(portPath, 'AT+CSQ'), 100);
             }
           } else if (initStep === 7) {
             if (line.includes('+CSQ:')) {
@@ -1183,9 +1364,14 @@ function startPortListener(portPath) {
             }
             
             if (line.includes('OK') || line.includes('ERROR')) {
+              // 基本初始化完成，立即广播状态让前端显示卡片
+              moduleStates[portPath].status = moduleStates[portPath].simDetected ? 'ok' : 'no_sim';
+              console.log(`${portPath} 基本初始化完成，状态: ${moduleStates[portPath].status}`);
+              broadcastUpdate(); // 立即广播，让前端显示卡片
+              
+              // 异步加载短信（不阻塞界面显示）
               initStep = 8;
-              // 检查所有短信（包括已读和未读）
-              setTimeout(() => sendCommand(portPath, 'AT+CMGL=4'), 300);
+              setTimeout(() => sendCommand(portPath, 'AT+CMGL=4'), 100);
             }
           } else if (initStep === 8) {
             if (line.includes('+CMGL:')) {
@@ -1263,10 +1449,9 @@ function startPortListener(portPath) {
               
               console.log(`${portPath} 保存短信，总数: ${moduleStates[portPath].messages.length}`);
             } else if (line.includes('OK')) {
-              initStep = 0; // 初始化完成
-              moduleStates[portPath].status = moduleStates[portPath].simDetected ? 'ok' : 'no_sim';
-              console.log(`${portPath} 初始化完成，状态: ${moduleStates[portPath].status}, 未读: ${moduleStates[portPath].unreadCount}, 短信数: ${moduleStates[portPath].messages.length}`);
-              broadcastUpdate();
+              initStep = 0; // 短信加载完成
+              console.log(`${portPath} 短信加载完成，未读: ${moduleStates[portPath].unreadCount}, 短信数: ${moduleStates[portPath].messages.length}`);
+              broadcastUpdate(); // 再次广播，更新短信数据
             }
           }
         });
@@ -1493,9 +1678,15 @@ app.post('/api/settings', requireAuth, async (req, res) => {
     return res.json({ success: false, error: '模块不存在' });
   }
   
-  // 保存设置
+  // 保存到内存
   moduleStates[port].forwardSettings = settings;
-  console.log(`${port} 转发设置已更新:`, settings);
+  console.log(`${port} 转发设置已更新 (HTTP: ${settings.httpEnabled ? '启用' : '禁用'}, SMS: ${settings.smsEnabled ? '启用' : '禁用'})`);
+  
+  // 保存到文件
+  const saved = saveModuleSetting(port, settings);
+  if (!saved) {
+    console.error(`${port} 设置保存到文件失败`);
+  }
   
   // 广播更新
   broadcastUpdate();

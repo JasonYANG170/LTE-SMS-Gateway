@@ -855,7 +855,14 @@ async function showSystemSettings() {
             <strong>说明:</strong><br>
             • {login} 会被替换为: "登录失败 - IP: xxx, 用户名: xxx, 错误: xxx, 时间: xxx"<br>
             • GET模式: 直接请求URL<br>
-            • POST模式: token 参数保留在 URL 中，其他参数转换为 POST body 发送
+            • POST模式: token 参数保留在 URL 中，其他参数以 JSON 格式发送到 body
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <button class="send-button" onclick="testLoginNotification()" style="background: #3b82f6; width: 100%;">
+              🧪 测试登录通知
+            </button>
+            <div id="notificationTestResult" style="margin-top: 8px;"></div>
           </div>
           
           <button class="send-button" onclick="updateNotificationConfig()">保存通知设置</button>
@@ -977,6 +984,85 @@ async function updateNotificationConfig() {
     }
   } catch (error) {
     status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${error.message}</p>`;
+  }
+}
+
+// 测试登录通知
+async function testLoginNotification() {
+  const url = document.getElementById('notificationUrl').value;
+  const method = document.getElementById('notificationMethod').value;
+  const resultDiv = document.getElementById('notificationTestResult');
+  
+  if (!url) {
+    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先输入通知 URL</p>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color: #10b981;">🧪 测试中...</p>';
+  
+  try {
+    // 通过服务器端代理发送请求
+    const response = await fetch('/api/test-login-notification', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: url,
+        method: method
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      resultDiv.innerHTML = `
+        <div style="background: #d1fae5; padding: 10px; border-radius: 6px; border-left: 4px solid #10b981;">
+          <p style="color: #065f46; margin: 0; font-weight: 600;">✓ 测试成功</p>
+          <p style="color: #065f46; margin: 4px 0 0 0; font-size: 0.85em;">
+            状态码: ${result.status} ${result.statusText}<br>
+            响应时间: ${result.duration}ms<br>
+            请求方式: ${result.method}<br>
+            测试消息: ${result.testMessage}
+          </p>
+          ${result.responseText ? `
+            <details style="margin-top: 8px;">
+              <summary style="cursor: pointer; color: #065f46; font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #065f46;">${escapeHtml(result.responseText)}</pre>
+            </details>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      const errorMsg = result.error || '请求失败';
+      resultDiv.innerHTML = `
+        <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+          <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
+          <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+            ${result.status ? `状态码: ${result.status} ${result.statusText}<br>响应时间: ${result.duration}ms<br>` : ''}
+            错误: ${errorMsg}<br>
+            ${errorMsg === 'fetch failed' || errorMsg.includes('ENOTFOUND') ? '提示: 请检查 URL 是否正确，服务器是否可访问' : ''}
+            ${errorMsg.includes('ECONNREFUSED') ? '提示: 服务器拒绝连接，请检查服务是否运行' : ''}
+          </p>
+          ${result.responseText ? `
+            <details style="margin-top: 8px;">
+              <summary style="cursor: pointer; color: #991b1b; font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #991b1b;">${escapeHtml(result.responseText)}</pre>
+            </details>
+          ` : ''}
+        </div>
+      `;
+    }
+  } catch (error) {
+    resultDiv.innerHTML = `
+      <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+        <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
+        <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+          错误: ${error.message}<br>
+          请检查网络连接或联系管理员
+        </p>
+      </div>
+    `;
   }
 }
 

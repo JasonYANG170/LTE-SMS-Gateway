@@ -4,3 +4,4 @@ package-lock.json
 *.log
 credentials.json
 notification.json
+module-settings.json
