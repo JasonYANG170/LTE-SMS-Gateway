@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LTE聚合网关管理面板</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>LTE聚合网关管理面板</h1>
+    <p style="text-align: center;">
+    LTE&SMS-Gateway Version v1.0.0
+    </p>
+    
+    <!-- From Uiverse.io by TreepDeep --> 
+    <div class="refresh-info">自动刷新中... <span id="lastUpdate"></span>
+    <p>请严格遵守当地法律法规，严禁用于违法违规用途</p></div>
+    <div class="footer-actions">
+      <button class="footer-button" onclick="showSystemSettings()">
+        <span class="button-icon"></span>
+        <span class="button-text">系统设置</span>
+      </button>
+      <button class="footer-button logout-button" onclick="handleLogout()">
+        <span class="button-icon"></span>
+        <span class="button-text">退出登录</span>
+      </button>
+    </div>
+    <div class="modules-grid" id="modulesGrid">
+      <!-- 模块卡片将通过JavaScript动态生成 -->
+    </div>
+    
+    <!-- 底部设置按钮 -->
+    
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

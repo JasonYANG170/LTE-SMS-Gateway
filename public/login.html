@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - LTE聚合网关管理面板</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .login-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .login-box {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .login-header h1 {
+      color: #10b981;
+      font-size: 1.8em;
+      margin-bottom: 10px;
+    }
+    
+    .login-header p {
+      color: #666;
+      font-size: 0.9em;
+    }
+    
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .form-group label {
+      font-weight: 600;
+      color: #333;
+      font-size: 0.9em;
+    }
+    
+    .form-group input {
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 1em;
+      transition: border-color 0.2s;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: #10b981;
+    }
+    
+    .login-button {
+      padding: 14px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 10px;
+    }
+    
+    .login-button:hover {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+    
+    .login-error {
+      padding: 12px;
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 8px;
+      font-size: 0.9em;
+      text-align: center;
+      display: none;
+    }
+    
+    .login-error.show {
+      display: block;
+    }
+    
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <div class="login-header">
+        <h1>系统登录</h1>
+        <p>LTE聚合网关管理面板</p>
+      </div>
+      
+      <form class="login-form" onsubmit="handleLogin(event)">
+        <div class="login-error" id="loginError"></div>
+        
+        <div class="form-group">
+          <label for="username">用户名</label>
+          <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+        
+        <div class="form-group">
+          <label for="password">密码</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        
+        <button type="submit" class="login-button">登录</button>
+        <p style="text-align: center;">
+            LTE&SMS-Gateway Version v1.0.0
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin(event) {
+      event.preventDefault();
+      
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorDiv = document.getElementById('loginError');
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // 登录成功，跳转到主页
+          window.location.href = '/';
+        } else {
+          // 显示错误信息
+          errorDiv.textContent = result.error || '登录失败';
+          errorDiv.classList.add('show');
+          
+          // 3秒后隐藏错误信息
+          setTimeout(() => {
+            errorDiv.classList.remove('show');
+          }, 3000);
+        }
+      } catch (error) {
+        errorDiv.textContent = '网络错误，请重试';
+        errorDiv.classList.add('show');
+      }
+    }
+  </script>
+</body>
+</html>

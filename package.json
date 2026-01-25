@@ -1,0 +1,16 @@
+{
+  "name": "lte-gateway",
+  "version": "1.0.0",
+  "description": "lte聚合网关",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "serialport": "^12.0.0",
+    "ws": "^8.16.0"
+  }
+}
