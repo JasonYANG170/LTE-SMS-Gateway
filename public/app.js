@@ -68,6 +68,9 @@ function createModuleCard(module, index) {
     'module_error': '模块错误',
     'error': '错误',
     'timeout': '超时',
+    'waiting': '等待中',
+    'initializing': '初始化中',
+    'reconnecting': '重连中',
     'unknown': '未知'
   };
   
@@ -109,6 +112,17 @@ function createModuleCard(module, index) {
               </span>
             </div>
           ` : ''}
+        </div>
+      ` : ''}
+      
+      <!-- 保号倒计时卡片 -->
+      ${module.keepAlive && module.keepAlive.enabled ? `
+        <div class="keep-alive-card">
+          <div class="keep-alive-header">
+            <span class="keep-alive-icon">📞</span>
+            <span class="keep-alive-title">保号倒计时</span>
+          </div>
+          ${getKeepAliveCountdown(module.keepAlive)}
         </div>
       ` : ''}
       <!-- SIM卡信息折叠区域 -->
@@ -162,11 +176,33 @@ function createModuleCard(module, index) {
             <div class="stat-label">未读短信</div>
           </div>
         </div>
+        
+        <!-- 存储容量信息 -->
+        ${module.storageInfo && module.storageInfo.total > 0 ? `
+          <div style="background: ${module.storageInfo.percentage >= 90 ? '#fee2e2' : module.storageInfo.percentage >= 80 ? '#fef3c7' : '#f0fdf4'}; padding: 12px; border-radius: 8px; margin-top: 12px; border: 2px solid ${module.storageInfo.percentage >= 90 ? '#fca5a5' : module.storageInfo.percentage >= 80 ? '#fde047' : '#86efac'};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 0.9em; color: ${module.storageInfo.percentage >= 90 ? '#991b1b' : module.storageInfo.percentage >= 80 ? '#92400e' : '#166534'}; font-weight: 600;">
+                💾 存储容量
+              </span>
+              <span style="font-size: 0.85em; color: ${module.storageInfo.percentage >= 90 ? '#991b1b' : module.storageInfo.percentage >= 80 ? '#92400e' : '#166534'};">
+                ${module.storageInfo.used}/${module.storageInfo.total} (${module.storageInfo.percentage}%)
+              </span>
+            </div>
+            <div style="background: white; height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: ${module.storageInfo.percentage >= 90 ? '#ef4444' : module.storageInfo.percentage >= 80 ? '#f59e0b' : '#10b981'}; height: 100%; width: ${module.storageInfo.percentage}%; transition: width 0.3s ease;"></div>
+            </div>
+            ${module.storageInfo.percentage >= 80 ? `
+              <div style="margin-top: 8px; font-size: 0.85em; color: ${module.storageInfo.percentage >= 90 ? '#991b1b' : '#92400e'};">
+                ${module.storageInfo.percentage >= 90 ? '⚠️ 存储空间严重不足，请及时清理' : '⚠️ 存储空间不足，建议清理'}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
       ` : ''}
       
       <!-- 操作按钮 -->
-      ${module.simDetected ? `
-        <div class="action-buttons">
+      <div class="action-buttons">
+        ${module.simDetected ? `
           <button class="action-button action-primary" onclick="showInbox('${module.port}', '${index}')">
             <span class="button-icon">📥</span>
             <span class="button-text">收件箱</span>
@@ -184,8 +220,12 @@ function createModuleCard(module, index) {
             <span class="button-icon">⚙️</span>
             <span class="button-text">设置</span>
           </button>
-        </div>
-      ` : ''}
+        ` : ''}
+        <button class="action-button action-warning" onclick="reconnectModule('${module.port}')" title="重新连接模块">
+          <span class="button-icon">🔄</span>
+          <span class="button-text">重连</span>
+        </button>
+      </div>
     </div>
   `;
   
@@ -353,7 +393,30 @@ function showCompose(port) {
       <div class="modal-body">
         <div class="form-group">
           <label>目标手机号:</label>
-          <input type="text" id="phoneInput" placeholder="例如: 13800138000" />
+          <div style="display: flex; gap: 8px;">
+            <select id="phoneCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
+              <option value="+86">+86 🇨🇳</option>
+              <option value="+852">+852 🇭🇰</option>
+              <option value="+853">+853 🇲🇴</option>
+              <option value="+886">+886 🇹🇼</option>
+              <option value="+1">+1 🇺🇸</option>
+              <option value="+44">+44 🇬🇧</option>
+              <option value="+81">+81 🇯🇵</option>
+              <option value="+82">+82 🇰🇷</option>
+              <option value="+65">+65 🇸🇬</option>
+              <option value="+60">+60 🇲🇾</option>
+              <option value="+61">+61 🇦🇺</option>
+              <option value="+49">+49 🇩🇪</option>
+              <option value="+33">+33 🇫🇷</option>
+              <option value="+7">+7 🇷🇺</option>
+              <option value="+91">+91 🇮🇳</option>
+              <option value="+66">+66 🇹🇭</option>
+              <option value="+84">+84 🇻🇳</option>
+              <option value="+63">+63 🇵🇭</option>
+              <option value="+62">+62 🇮🇩</option>
+            </select>
+            <input type="text" id="phoneInput" placeholder="例如: 13800138000" style="flex: 1;" />
+          </div>
         </div>
         <div class="form-group">
           <label>短信内容:</label>
@@ -369,14 +432,18 @@ function showCompose(port) {
 
 // 发送短信
 async function sendSMS(port) {
-  const phone = document.getElementById('phoneInput').value;
+  const countryCode = document.getElementById('phoneCountryCode').value;
+  const phoneRaw = document.getElementById('phoneInput').value.trim();
   const message = document.getElementById('messageInput').value;
   const status = document.getElementById('sendStatus');
   
-  if (!phone || !message) {
+  if (!phoneRaw || !message) {
     status.innerHTML = '<p style="color: #ef4444;">请填写手机号和短信内容</p>';
     return;
   }
+  
+  // 拼接区号和手机号
+  const phone = countryCode + phoneRaw;
   
   status.innerHTML = '<p style="color: #10b981;">发送中...</p>';
   
@@ -429,15 +496,43 @@ async function clearUnreadCount(port) {
 }
 
 // 显示设置界面
-function showSettings(port, moduleIndex) {
+async function showSettings(port, moduleIndex) {
   const module = window.modulesData ? window.modulesData[moduleIndex - 1] : null;
   const settings = module?.forwardSettings || {
     httpEnabled: false,
     httpUrl: '',
     httpMethod: 'GET',
     smsEnabled: false,
-    smsTarget: ''
+    smsTarget: '',
+    storageWarningEnabled: false,
+    storageWarningThreshold: 80
   };
+  
+  // 拆分已保存的手机号区号
+  const smsPhone = splitPhoneNumber(settings.smsTarget);
+  
+  // 获取保号配置
+  let keepAliveConfig = {
+    enabled: false,
+    targetPhone: '',
+    intervalDays: 30,
+    message: '',
+    lastSentTime: null
+  };
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/keep-alive/${portName}`);
+    const result = await response.json();
+    if (result.success) {
+      keepAliveConfig = result.config;
+    }
+  } catch (error) {
+    console.error('获取保号配置失败:', error);
+  }
+  
+  // 拆分保号手机号区号
+  const keepAlivePhone = splitPhoneNumber(keepAliveConfig.targetPhone);
   
   const modal = document.createElement('div');
   modal.className = 'modal';
@@ -445,7 +540,7 @@ function showSettings(port, moduleIndex) {
   modal.innerHTML = `
     <div class="modal-content">
       <div class="modal-header">
-        <h2>⚙️ 转发设置 - ${port}</h2>
+        <h2>⚙️ 模块设置 - ${port}</h2>
         <button class="close-button" onclick="this.closest('.modal').remove()">✕</button>
       </div>
       <div class="modal-body">
@@ -495,13 +590,134 @@ function showSettings(port, moduleIndex) {
           
           <div class="form-group">
             <label>目标手机号:</label>
-            <input type="text" id="smsTarget" value="${escapeHtml(settings.smsTarget)}" 
-              placeholder="例如: 13800138000" 
-              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+            <div style="display: flex; gap: 8px;">
+              <select id="smsCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
+                <option value="+86" ${smsPhone.code === '+86' ? 'selected' : ''}>+86 🇨🇳</option>
+                <option value="+852" ${smsPhone.code === '+852' ? 'selected' : ''}>+852 🇭🇰</option>
+                <option value="+853" ${smsPhone.code === '+853' ? 'selected' : ''}>+853 🇲🇴</option>
+                <option value="+886" ${smsPhone.code === '+886' ? 'selected' : ''}>+886 🇹🇼</option>
+                <option value="+1" ${smsPhone.code === '+1' ? 'selected' : ''}>+1 🇺🇸</option>
+                <option value="+44" ${smsPhone.code === '+44' ? 'selected' : ''}>+44 🇬🇧</option>
+                <option value="+81" ${smsPhone.code === '+81' ? 'selected' : ''}>+81 🇯🇵</option>
+                <option value="+82" ${smsPhone.code === '+82' ? 'selected' : ''}>+82 🇰🇷</option>
+                <option value="+65" ${smsPhone.code === '+65' ? 'selected' : ''}>+65 🇸🇬</option>
+                <option value="+60" ${smsPhone.code === '+60' ? 'selected' : ''}>+60 🇲🇾</option>
+                <option value="+61" ${smsPhone.code === '+61' ? 'selected' : ''}>+61 🇦🇺</option>
+                <option value="+49" ${smsPhone.code === '+49' ? 'selected' : ''}>+49 🇩🇪</option>
+                <option value="+33" ${smsPhone.code === '+33' ? 'selected' : ''}>+33 🇫🇷</option>
+                <option value="+7" ${smsPhone.code === '+7' ? 'selected' : ''}>+7 🇷🇺</option>
+                <option value="+91" ${smsPhone.code === '+91' ? 'selected' : ''}>+91 🇮🇳</option>
+                <option value="+66" ${smsPhone.code === '+66' ? 'selected' : ''}>+66 🇹🇭</option>
+                <option value="+84" ${smsPhone.code === '+84' ? 'selected' : ''}>+84 🇻🇳</option>
+                <option value="+63" ${smsPhone.code === '+63' ? 'selected' : ''}>+63 🇵🇭</option>
+                <option value="+62" ${smsPhone.code === '+62' ? 'selected' : ''}>+62 🇮🇩</option>
+              </select>
+              <input type="text" id="smsTarget" value="${escapeHtml(smsPhone.number)}" 
+                placeholder="例如: 13800138000" 
+                style="flex: 1; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+            </div>
           </div>
           
           <div style="background: #fef3c7; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #92400e;">
             <strong>提示:</strong> 收到的短信会自动转发到指定手机号
+          </div>
+        </div>
+        
+        <!-- 存储警告设置 -->
+        <div style="background: #fef3c7; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #fde047;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <input type="checkbox" id="storageWarningEnabled" ${settings.storageWarningEnabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
+            <label for="storageWarningEnabled" style="font-weight: 600; font-size: 1.1em;">⚠️ 存储容量警告</label>
+          </div>
+          
+          <div class="form-group">
+            <label>警告阈值 (%):</label>
+            <input type="number" id="storageWarningThreshold" value="${settings.storageWarningThreshold || 80}" 
+              min="50" max="95" step="5"
+              placeholder="例如: 80" 
+              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+          </div>
+          
+          <div style="background: #fffbeb; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #92400e;">
+            <strong>说明:</strong><br>
+            • 当存储使用率达到设定阈值时，自动发送警告通知<br>
+            • 通知将通过上面配置的 HTTP 或 SMS 转发功能发送<br>
+            • 建议设置为 80% 或更高，避免频繁通知<br>
+            • 需要先启用 HTTP 转发或 SMS 转发功能
+          </div>
+          
+          <div style="margin-top: 12px;">
+            <button class="send-button" onclick="testStorageWarning('${port}')" style="background: #f59e0b; width: 100%;">
+              🧪 测试存储警告通知
+            </button>
+            <div id="storageWarningTestResult" style="margin-top: 8px;"></div>
+          </div>
+        </div>
+        
+        <!-- 保号设置 -->
+        <div style="background: #f0fdf4; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #86efac;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <input type="checkbox" id="keepAliveEnabled" ${keepAliveConfig.enabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
+            <label for="keepAliveEnabled" style="font-weight: 600; font-size: 1.1em;">📞 保号功能</label>
+          </div>
+          
+          <div class="form-group">
+            <label>目标手机号:</label>
+            <div style="display: flex; gap: 8px;">
+              <select id="keepAliveCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
+                <option value="+86" ${keepAlivePhone.code === '+86' ? 'selected' : ''}>+86 🇨🇳</option>
+                <option value="+852" ${keepAlivePhone.code === '+852' ? 'selected' : ''}>+852 🇭🇰</option>
+                <option value="+853" ${keepAlivePhone.code === '+853' ? 'selected' : ''}>+853 🇲🇴</option>
+                <option value="+886" ${keepAlivePhone.code === '+886' ? 'selected' : ''}>+886 🇹🇼</option>
+                <option value="+1" ${keepAlivePhone.code === '+1' ? 'selected' : ''}>+1 🇺🇸</option>
+                <option value="+44" ${keepAlivePhone.code === '+44' ? 'selected' : ''}>+44 🇬🇧</option>
+                <option value="+81" ${keepAlivePhone.code === '+81' ? 'selected' : ''}>+81 🇯🇵</option>
+                <option value="+82" ${keepAlivePhone.code === '+82' ? 'selected' : ''}>+82 🇰🇷</option>
+                <option value="+65" ${keepAlivePhone.code === '+65' ? 'selected' : ''}>+65 🇸🇬</option>
+                <option value="+60" ${keepAlivePhone.code === '+60' ? 'selected' : ''}>+60 🇲🇾</option>
+                <option value="+61" ${keepAlivePhone.code === '+61' ? 'selected' : ''}>+61 🇦🇺</option>
+                <option value="+49" ${keepAlivePhone.code === '+49' ? 'selected' : ''}>+49 🇩🇪</option>
+                <option value="+33" ${keepAlivePhone.code === '+33' ? 'selected' : ''}>+33 🇫🇷</option>
+                <option value="+7" ${keepAlivePhone.code === '+7' ? 'selected' : ''}>+7 🇷🇺</option>
+                <option value="+91" ${keepAlivePhone.code === '+91' ? 'selected' : ''}>+91 🇮🇳</option>
+                <option value="+66" ${keepAlivePhone.code === '+66' ? 'selected' : ''}>+66 🇹🇭</option>
+                <option value="+84" ${keepAlivePhone.code === '+84' ? 'selected' : ''}>+84 🇻🇳</option>
+                <option value="+63" ${keepAlivePhone.code === '+63' ? 'selected' : ''}>+63 🇵🇭</option>
+                <option value="+62" ${keepAlivePhone.code === '+62' ? 'selected' : ''}>+62 🇮🇩</option>
+              </select>
+              <input type="text" id="keepAlivePhone" value="${escapeHtml(keepAlivePhone.number)}" 
+                placeholder="例如: 13800138000" 
+                style="flex: 1; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>间隔天数:</label>
+            <input type="number" id="keepAliveInterval" value="${keepAliveConfig.intervalDays}" 
+              min="1" max="365"
+              placeholder="例如: 30" 
+              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+          </div>
+          
+          <div class="form-group">
+            <label>短信内容:</label>
+            <textarea id="keepAliveMessage" rows="3" 
+              placeholder="输入保号短信内容..." 
+              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; resize: vertical;">${escapeHtml(keepAliveConfig.message)}</textarea>
+          </div>
+          
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button class="send-button" onclick="testKeepAlive('${port}')" style="background: #10b981; flex: 1;">
+              🧪 测试发送
+            </button>
+          </div>
+          
+          <div style="background: #dbeafe; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #1e40af;">
+            <strong>说明:</strong><br>
+            • 保号功能会按设定的间隔天数自动发送短信<br>
+            • 首次启用后，将在设定的间隔天数后发送第一条短信<br>
+            • 用于保持号码活跃状态，防止因长期不使用而被运营商回收<br>
+            • 建议间隔设置为30天，短信内容可以是简单的问候语
           </div>
         </div>
         
@@ -525,18 +741,34 @@ function showSettings(port, moduleIndex) {
 async function saveSettings(port, moduleIndex) {
   const status = document.getElementById('settingsStatus');
   
+  const smsCountryCode = document.getElementById('smsCountryCode').value;
+  const smsPhoneRaw = document.getElementById('smsTarget').value.trim();
+  
   const settings = {
     httpEnabled: document.getElementById('httpEnabled').checked,
     httpUrl: document.getElementById('httpUrl').value,
     httpMethod: document.getElementById('httpMethod').value,
     smsEnabled: document.getElementById('smsEnabled').checked,
-    smsTarget: document.getElementById('smsTarget').value
+    smsTarget: smsPhoneRaw ? smsCountryCode + smsPhoneRaw : '',
+    storageWarningEnabled: document.getElementById('storageWarningEnabled').checked,
+    storageWarningThreshold: parseInt(document.getElementById('storageWarningThreshold').value) || 80
+  };
+  
+  const keepAliveCountryCode = document.getElementById('keepAliveCountryCode').value;
+  const keepAlivePhoneRaw = document.getElementById('keepAlivePhone').value.trim();
+  
+  const keepAliveSettings = {
+    enabled: document.getElementById('keepAliveEnabled').checked,
+    targetPhone: keepAlivePhoneRaw ? keepAliveCountryCode + keepAlivePhoneRaw : '',
+    intervalDays: parseInt(document.getElementById('keepAliveInterval').value) || 30,
+    message: document.getElementById('keepAliveMessage').value
   };
   
   status.innerHTML = '<p style="color: #10b981;">保存中...</p>';
   
   try {
-    const response = await fetch('/api/settings', {
+    // 保存转发设置
+    const response1 = await fetch('/api/settings', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -544,18 +776,131 @@ async function saveSettings(port, moduleIndex) {
       body: JSON.stringify({ port, settings })
     });
     
-    const result = await response.json();
+    const result1 = await response1.json();
     
-    if (result.success) {
+    // 保存保号设置
+    const portName = port.replace('/dev/', '');
+    const response2 = await fetch(`/api/keep-alive/${portName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(keepAliveSettings)
+    });
+    
+    const result2 = await response2.json();
+    
+    if (result1.success && result2.success) {
       status.innerHTML = '<p style="color: #10b981;">✓ 保存成功！</p>';
       setTimeout(() => {
         document.querySelector('.modal').remove();
       }, 1500);
     } else {
-      status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${result.error}</p>`;
+      const errors = [];
+      if (!result1.success) errors.push(`转发设置: ${result1.error}`);
+      if (!result2.success) errors.push(`保号设置: ${result2.error}`);
+      status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${errors.join(', ')}</p>`;
     }
   } catch (error) {
     status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${error.message}</p>`;
+  }
+}
+
+// 测试保号短信
+async function testKeepAlive(port) {
+  const countryCode = document.getElementById('keepAliveCountryCode').value;
+  const phoneRaw = document.getElementById('keepAlivePhone').value.trim();
+  const message = document.getElementById('keepAliveMessage').value;
+  
+  if (!phoneRaw || !message) {
+    alert('⚠️ 请先填写目标手机号和短信内容');
+    return;
+  }
+  
+  const targetPhone = countryCode + phoneRaw;
+  
+  if (!confirm(`确定要发送测试短信到 ${targetPhone} 吗？\n\n内容: ${message}`)) {
+    return;
+  }
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/keep-alive/${portName}/send`, {
+      method: 'POST'
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      alert('✓ 测试短信发送成功！');
+    } else {
+      alert(`✗ 测试短信发送失败: ${result.error}`);
+    }
+  } catch (error) {
+    alert(`✗ 测试短信发送失败: ${error.message}`);
+  }
+}
+
+// 测试存储警告通知
+async function testStorageWarning(port) {
+  const resultDiv = document.getElementById('storageWarningTestResult');
+  
+  const storageWarningEnabled = document.getElementById('storageWarningEnabled').checked;
+  const httpEnabled = document.getElementById('httpEnabled').checked;
+  const smsEnabled = document.getElementById('smsEnabled').checked;
+  
+  if (!storageWarningEnabled) {
+    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先启用存储容量警告功能</p>';
+    return;
+  }
+  
+  if (!httpEnabled && !smsEnabled) {
+    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先启用 HTTP 转发或 SMS 转发功能</p>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color: #10b981;">🧪 发送测试通知中...</p>';
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/test-storage-warning/${portName}`, {
+      method: 'POST'
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      let details = [];
+      if (result.httpSent) details.push('HTTP转发成功');
+      if (result.smsSent) details.push('SMS转发成功');
+      
+      resultDiv.innerHTML = `
+        <div style="background: #d1fae5; padding: 10px; border-radius: 6px; border-left: 4px solid #10b981;">
+          <p style="color: #065f46; margin: 0; font-weight: 600;">✓ 测试通知发送成功</p>
+          <p style="color: #065f46; margin: 4px 0 0 0; font-size: 0.85em;">
+            ${details.join(' · ')}
+          </p>
+        </div>
+      `;
+    } else {
+      resultDiv.innerHTML = `
+        <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+          <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
+          <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+            ${result.error || '未知错误'}
+          </p>
+        </div>
+      `;
+    }
+  } catch (error) {
+    resultDiv.innerHTML = `
+      <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+        <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
+        <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+          ${error.message}
+        </p>
+      </div>
+    `;
   }
 }
 
@@ -642,6 +987,21 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// 从带区号的手机号中拆分区号和号码
+function splitPhoneNumber(fullPhone) {
+  if (!fullPhone) return { code: '+86', number: '' };
+  
+  const knownCodes = ['+886', '+852', '+853', '+86', '+82', '+81', '+66', '+65', '+63', '+62', '+61', '+60', '+91', '+84', '+49', '+44', '+33', '+1', '+7'];
+  
+  for (const code of knownCodes) {
+    if (fullPhone.startsWith(code)) {
+      return { code: code, number: fullPhone.substring(code.length) };
+    }
+  }
+  
+  return { code: '+86', number: fullPhone };
 }
 
 // 切换SIM卡信息显示/隐藏
@@ -764,6 +1124,77 @@ function getSignalClass(rssi) {
   if (rssi >= 15) return 'signal-good';
   if (rssi >= 10) return 'signal-fair';
   return 'signal-poor';
+}
+
+// 计算保号倒计时
+function getKeepAliveCountdown(keepAlive) {
+  if (!keepAlive.lastSentTime) {
+    return `
+      <div class="keep-alive-content">
+        <div class="keep-alive-status waiting">
+          <div class="keep-alive-days">配置中</div>
+          <div class="keep-alive-hint">保号功能已启用，正在初始化</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  const now = Date.now();
+  const lastSent = keepAlive.lastSentTime;
+  const intervalMs = keepAlive.intervalDays * 24 * 60 * 60 * 1000;
+  const nextSendTime = lastSent + intervalMs;
+  const remainingMs = nextSendTime - now;
+  
+  if (remainingMs <= 0) {
+    return `
+      <div class="keep-alive-content">
+        <div class="keep-alive-status sending">
+          <div class="keep-alive-days">准备发送</div>
+          <div class="keep-alive-hint">即将发送保号短信</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  const remainingDays = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+  const remainingHours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  
+  let statusClass = 'normal';
+  if (remainingDays <= 3) {
+    statusClass = 'warning';
+  } else if (remainingDays <= 7) {
+    statusClass = 'attention';
+  }
+  
+  // 计算进度百分比（已过时间 / 总时间）
+  const elapsedMs = now - lastSent;
+  const progressPercent = Math.max(0, Math.min(100, (elapsedMs / intervalMs) * 100));
+  
+  return `
+    <div class="keep-alive-content">
+      <div class="keep-alive-status ${statusClass}">
+        <div class="keep-alive-days">
+          <span class="days-number">${remainingDays}</span>
+          <span class="days-unit">天</span>
+          ${remainingHours > 0 ? `<span class="hours-number">${remainingHours}</span><span class="hours-unit">小时</span>` : ''}
+        </div>
+        <div class="keep-alive-hint">距离下次发送</div>
+      </div>
+      <div class="keep-alive-progress">
+        <div class="keep-alive-progress-bar" style="width: ${progressPercent}%"></div>
+      </div>
+      <div class="keep-alive-info">
+        <div class="keep-alive-info-item">
+          <span class="info-label">间隔周期:</span>
+          <span class="info-value">${keepAlive.intervalDays} 天</span>
+        </div>
+        <div class="keep-alive-info-item">
+          <span class="info-label">下次发送:</span>
+          <span class="info-value">${new Date(nextSendTime).toLocaleDateString('zh-CN')}</span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function updateLastUpdateTime() {
@@ -1182,6 +1613,29 @@ async function handleLogout() {
   
   // 跳转到登录页
   window.location.href = '/login.html';
+}
+
+// 重连模块
+async function reconnectModule(port) {
+  if (!confirm(`确定要重新连接 ${port} 吗？\n\n这将关闭当前连接并重新初始化模块。`)) {
+    return;
+  }
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/reconnect/${portName}`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+      alert(`✓ ${port} 正在重新连接...\n\n请稍等片刻，模块将自动重新初始化。`);
+    } else {
+      alert(`✗ 重连失败: ${result.error}`);
+    }
+  } catch (error) {
+    alert(`✗ 重连失败: ${error.message}`);
+  }
 }
 
 // 启动连接
