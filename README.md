@@ -24,7 +24,7 @@
 - ✅支持信号监测，可插入不同运营商SIM，监测基站信号强度
 - 🚧Docker容器部署（待支持）
 
-本项目无内置MCU，须搭配Linux上位机或NAS服务器使用
+本项目无内置MCU，须搭配Linux上位机或NAS服务器使用  
 如遇问题，请向我提出issues
 ## 软件
 **LTE&amp;SMS聚合网关管理面板：**   
@@ -41,7 +41,7 @@ sudo apt update
 sudo apt install nodejs
 npm install
 ```
-3. 串口权限 
+3. 串口权限   
     **3.1 通过加入dialout获取权限(推荐)**  
     3.1.1 如果是www用户启动服务器，则需要为www加入dialout组，否则无UART访问权限  
     ```
@@ -65,7 +65,7 @@ npm start
 服务端口：`5823`  
 账户：`root`  
 密码：`password`  
-如有外部访问需求，可使用Nginx添加反代
+如有外部访问需求，可使用Nginx添加反代  
 HTTPS POST推送已在本地部署[Gotify](https://gotify.net/)服务验证通过
 #### 默认配置
 
