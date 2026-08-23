@@ -169,7 +169,11 @@ function createModuleCard(module, index) {
         <div class="stats-grid">
           <div class="stat-item">
             <div class="stat-value">${module.messages?.length || 0}</div>
-            <div class="stat-label">总短信数</div>
+            <div class="stat-label">SIM短信数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" style="color: #16a34a;">${module.diskMessageCount || 0}</div>
+            <div class="stat-label">磁盘短信数</div>
           </div>
           <div class="stat-item">
             <div class="stat-value" style="color: #ef4444;">${module.unreadCount || 0}</div>
@@ -196,6 +200,13 @@ function createModuleCard(module, index) {
                 ${module.storageInfo.percentage >= 90 ? '⚠️ 存储空间严重不足，请及时清理' : '⚠️ 存储空间不足，建议清理'}
               </div>
             ` : ''}
+          </div>
+        ` : ''}
+        
+        <!-- 自动清空SIM状态 -->
+        ${module.autoClearSimEnabled ? `
+          <div style="background: #fff1f2; padding: 8px 12px; border-radius: 8px; margin-top: 8px; border: 1px solid #fecaca; display: flex; align-items: center; gap: 6px; font-size: 0.85em; color: #991b1b;">
+            🔄 自动清空SIM空间已启用（${module.autoClearSimThreshold || 99}%）
           </div>
         ` : ''}
       ` : ''}
@@ -336,6 +347,8 @@ async function showInbox(port, moduleIndex) {
     }
     
     let messageList = result.messages || [];
+    const simCount = result.simCount || 0;
+    const diskCount = result.diskCount || 0;
     
     // 按接收时间倒序排列（最新的在前）
     messageList = messageList.slice().sort((a, b) => {
@@ -345,14 +358,37 @@ async function showInbox(port, moduleIndex) {
     // 更新模态框内容
     modal.querySelector('.modal-body').innerHTML = `
       ${messageList.length > 0 ? `
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-          <button class="send-button" onclick="clearInbox('${port}')" style="background: #ef4444;">🗑️ 清空收件箱</button>
+        <!-- 存储统计 -->
+        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+          <div style="background: #eff6ff; padding: 10px 16px; border-radius: 8px; border: 1px solid #bfdbfe; flex: 1; min-width: 120px; text-align: center;">
+            <div style="font-size: 1.4em; font-weight: 700; color: #2563eb;">${simCount}</div>
+            <div style="font-size: 0.85em; color: #1e40af;">💾 SIM卡存储</div>
+          </div>
+          <div style="background: #f0fdf4; padding: 10px 16px; border-radius: 8px; border: 1px solid #86efac; flex: 1; min-width: 120px; text-align: center;">
+            <div style="font-size: 1.4em; font-weight: 700; color: #16a34a;">${diskCount}</div>
+            <div style="font-size: 0.85em; color: #166534;">💿 磁盘存储</div>
+          </div>
+        </div>
+        <!-- 操作按钮 -->
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+          <button class="send-button" onclick="clearInbox('${port}')" style="background: #ef4444; flex: 1; min-width: 140px;">🗑️ 清空SIM卡短信</button>
+          <button class="send-button" onclick="clearDiskMessages('${port}')" style="background: #dc2626; flex: 1; min-width: 140px;">🧹 清空磁盘短信</button>
+          ${simCount > 0 ? `<button class="send-button" onclick="transferToDisk('${port}')" style="background: #2563eb; flex: 1; min-width: 140px;">📤 转移到磁盘</button>` : ''}
         </div>
         <div class="message-list">
           ${messageList.map((msg, idx) => `
             <div class="message-item">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <strong style="color: #10b981;">📞 ${escapeHtml(msg.phone || '未知号码')}</strong>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <strong style="color: #10b981;">📞 ${escapeHtml(msg.phone || '未知号码')}</strong>
+                  <span style="display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 600; ${
+                    (msg.storageLocation === 'disk')
+                      ? 'background: #dcfce7; color: #166534; border: 1px solid #86efac;'
+                      : 'background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;'
+                  }">
+                    ${(msg.storageLocation === 'disk') ? '💿 磁盘' : '💾 SIM'}
+                  </span>
+                </div>
                 <span style="color: #666; font-size: 0.9em;">${escapeHtml(msg.time || msg.timestamp)}</span>
               </div>
               ${msg.content ? `
@@ -369,7 +405,7 @@ async function showInbox(port, moduleIndex) {
           `).join('')}
         </div>
         <div style="margin-top: 12px; text-align: center; color: #666; font-size: 0.9em;">
-          共 ${messageList.length} 条消息
+          共 ${messageList.length} 条消息 (SIM: ${simCount}, 磁盘: ${diskCount})
         </div>
       ` : '<p style="text-align: center; color: #666;">暂无短信</p>'}
     `;
@@ -520,6 +556,10 @@ async function showSettings(port, moduleIndex) {
     lastSentTime: null
   };
   
+  // 获取自动清空SIM配置
+  let autoClearSimEnabled = false;
+  let autoClearSimThreshold = 99;
+  
   try {
     const portName = port.replace('/dev/', '');
     const response = await fetch(`/api/keep-alive/${portName}`);
@@ -529,6 +569,18 @@ async function showSettings(port, moduleIndex) {
     }
   } catch (error) {
     console.error('获取保号配置失败:', error);
+  }
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/auto-clear-sim/${portName}`);
+    const result = await response.json();
+    if (result.success) {
+      autoClearSimEnabled = result.enabled;
+      autoClearSimThreshold = result.threshold || 99;
+    }
+  } catch (error) {
+    console.error('获取自动清空SIM配置失败:', error);
   }
   
   // 拆分保号手机号区号
@@ -651,6 +703,30 @@ async function showSettings(port, moduleIndex) {
               🧪 测试存储警告通知
             </button>
             <div id="storageWarningTestResult" style="margin-top: 8px;"></div>
+          </div>
+        </div>
+        
+        <!-- 自动清空SIM空间设置 -->
+        <div style="background: #fef2f2; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #fecaca;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <input type="checkbox" id="autoClearSimEnabled" ${autoClearSimEnabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
+            <label for="autoClearSimEnabled" style="font-weight: 600; font-size: 1.1em;">🔄 自动清空SIM空间</label>
+          </div>
+
+          <div class="form-group">
+            <label>自动触发使用率 (%):</label>
+            <input type="number" id="autoClearSimThreshold" value="${autoClearSimThreshold}" 
+              min="1" max="100" step="1"
+              placeholder="例如: 95" 
+              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+          </div>
+          
+          <div style="background: #fff1f2; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #991b1b;">
+            <strong>说明:</strong><br>
+            • 启用后，当SIM卡存储使用率达到设定阈值时，自动触发<br>
+            • 系统会将SIM卡中的短信加密保存到磁盘，然后清空SIM卡<br>
+            • 转移后的短信在收件箱中仍可正常查看（标记为"💿 磁盘"）<br>
+            • 需要配合存储容量监控使用，建议同时启用存储警告
           </div>
         </div>
         
@@ -778,8 +854,23 @@ async function saveSettings(port, moduleIndex) {
     
     const result1 = await response1.json();
     
-    // 保存保号设置
+    // 保存自动清空SIM设置
+    const autoClearSimEnabled = document.getElementById('autoClearSimEnabled').checked;
+    const autoClearSimThreshold = parseInt(document.getElementById('autoClearSimThreshold').value, 10) || 99;
     const portName = port.replace('/dev/', '');
+    const responseAutoClear = await fetch(`/api/auto-clear-sim/${portName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        enabled: autoClearSimEnabled,
+        threshold: autoClearSimThreshold
+      })
+    });
+    const resultAutoClear = await responseAutoClear.json();
+    
+    // 保存保号设置
     const response2 = await fetch(`/api/keep-alive/${portName}`, {
       method: 'POST',
       headers: {
@@ -790,7 +881,7 @@ async function saveSettings(port, moduleIndex) {
     
     const result2 = await response2.json();
     
-    if (result1.success && result2.success) {
+    if (result1.success && resultAutoClear.success && result2.success) {
       status.innerHTML = '<p style="color: #10b981;">✓ 保存成功！</p>';
       setTimeout(() => {
         document.querySelector('.modal').remove();
@@ -798,6 +889,7 @@ async function saveSettings(port, moduleIndex) {
     } else {
       const errors = [];
       if (!result1.success) errors.push(`转发设置: ${result1.error}`);
+      if (!resultAutoClear.success) errors.push(`自动清空SIM设置: ${resultAutoClear.error}`);
       if (!result2.success) errors.push(`保号设置: ${result2.error}`);
       status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${errors.join(', ')}</p>`;
     }
@@ -1551,9 +1643,9 @@ async function clearLoginLogs() {
   }
 }
 
-// 清空收件箱
+// 清空收件箱（仅清空SIM卡短信）
 async function clearInbox(port) {
-  if (!confirm('确定要清空该模块的所有短信吗？\n\n⚠️ 此操作将从 SIM 卡中永久删除所有短信（包括未读），不可恢复！')) {
+  if (!confirm('确定要清空SIM卡中的所有短信吗？\n\n⚠️ 此操作将从 SIM 卡中永久删除所有短信（包括未读），不可恢复！\n\n磁盘存储的短信不会受影响。')) {
     return;
   }
   
@@ -1567,12 +1659,60 @@ async function clearInbox(port) {
     if (result.success) {
       // 关闭模态框并重新打开以刷新
       document.querySelector('.modal').remove();
-      alert('✓ 收件箱已清空\n所有短信已从 SIM 卡中删除');
+      alert('✓ SIM卡短信已清空\n磁盘存储的短信不受影响');
     } else {
       alert(`✗ 清空失败: ${result.error}`);
     }
   } catch (error) {
     alert(`✗ 清空失败: ${error.message}`);
+  }
+}
+
+// 清空磁盘存储的短信
+async function clearDiskMessages(port) {
+  if (!confirm('确定要清空磁盘存储的所有短信吗？\n\n⚠️ 此操作不可恢复！\n\nSIM卡中的短信不受影响。')) {
+    return;
+  }
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/clear-disk-messages/${portName}`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+      document.querySelector('.modal').remove();
+      alert('✓ 磁盘短信已清空\nSIM卡中的短信不受影响');
+    } else {
+      alert(`✗ 清空失败: ${result.error}`);
+    }
+  } catch (error) {
+    alert(`✗ 清空失败: ${error.message}`);
+  }
+}
+
+// 将SIM短信转移到磁盘
+async function transferToDisk(port) {
+  if (!confirm('确定要将SIM卡中的所有短信转移到磁盘加密存储吗？\n\n转移后将从SIM卡中删除，但可在收件箱中继续查看。')) {
+    return;
+  }
+  
+  try {
+    const portName = port.replace('/dev/', '');
+    const response = await fetch(`/api/transfer-to-disk/${portName}`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+      document.querySelector('.modal').remove();
+      alert(`✓ 转移成功！\n已将 ${result.transferred} 条短信从SIM卡转移到磁盘\n磁盘共 ${result.diskTotal} 条短信`);
+    } else {
+      alert(`✗ 转移失败: ${result.error}`);
+    }
+  } catch (error) {
+    alert(`✗ 转移失败: ${error.message}`);
   }
 }
 
