@@ -32,6 +32,212 @@ const MODULE_SETTINGS_FILE = path.join(__dirname, 'module-settings.json');
 const ENCRYPTION_KEY = crypto.scryptSync('lte-gateway-encryption-key', 'salt', 32);
 const IV_LENGTH = 16;
 
+// ========== 磁盘存储短信管理 ==========
+const DISK_SMS_DIR = path.join(__dirname, 'disk-sms');
+
+// 确保磁盘短信存储目录存在
+function ensureDiskSmsDir() {
+  if (!fs.existsSync(DISK_SMS_DIR)) {
+    fs.mkdirSync(DISK_SMS_DIR, { recursive: true });
+    console.log('已创建磁盘短信存储目录:', DISK_SMS_DIR);
+  }
+}
+
+// 获取端口对应的磁盘短信文件路径
+function getDiskSmsFile(portPath) {
+  const portName = portPath.replace('/dev/', '');
+  return path.join(DISK_SMS_DIR, `sms-${portName}.json`);
+}
+
+// 加载磁盘存储的短信（解密后返回）
+function loadDiskMessages(portPath) {
+  try {
+    const filePath = getDiskSmsFile(portPath);
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+    const encryptedData = fs.readFileSync(filePath, 'utf8');
+    const decrypted = decrypt(encryptedData);
+    if (!decrypted) {
+      console.error(`${portPath} 磁盘短信解密失败`);
+      return [];
+    }
+    return JSON.parse(decrypted);
+  } catch (error) {
+    console.error(`${portPath} 加载磁盘短信失败:`, error.message);
+    return [];
+  }
+}
+
+// 保存短信到磁盘（加密存储）
+function saveDiskMessages(portPath, messages) {
+  try {
+    ensureDiskSmsDir();
+    const filePath = getDiskSmsFile(portPath);
+    const jsonStr = JSON.stringify(messages, null, 2);
+    const encrypted = encrypt(jsonStr);
+    fs.writeFileSync(filePath, encrypted);
+    console.log(`${portPath} 已保存 ${messages.length} 条短信到磁盘`);
+    return true;
+  } catch (error) {
+    console.error(`${portPath} 保存磁盘短信失败:`, error.message);
+    return false;
+  }
+}
+
+// 获取磁盘短信数量
+function getDiskMessageCount(portPath) {
+  const messages = loadDiskMessages(portPath);
+  return messages.length;
+}
+
+// 将SIM短信转移到磁盘（加密存储）
+function transferSmsToDisk(portPath, messages) {
+  // 给每条消息添加磁盘存储标记
+  const diskMessages = messages.map(msg => ({
+    ...msg,
+    storageLocation: 'disk'
+  }));
+  return saveDiskMessages(portPath, diskMessages);
+}
+
+// 清空磁盘短信
+function clearDiskMessages(portPath) {
+  try {
+    const filePath = getDiskSmsFile(portPath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`${portPath} 磁盘短信已清空`);
+    }
+    return true;
+  } catch (error) {
+    console.error(`${portPath} 清空磁盘短信失败:`, error.message);
+    return false;
+  }
+}
+
+// ========== 自动清空SIM空间管理 ==========
+const AUTO_CLEAR_SIM_FILE = path.join(__dirname, 'auto-clear-sim.json');
+const DEFAULT_AUTO_CLEAR_SIM_THRESHOLD = 99;
+
+function normalizeAutoClearSimThreshold(value) {
+  const threshold = parseInt(value, 10);
+  if (Number.isNaN(threshold)) {
+    return DEFAULT_AUTO_CLEAR_SIM_THRESHOLD;
+  }
+  return Math.min(100, Math.max(1, threshold));
+}
+
+function getAutoClearSimThreshold(portPath, config = getAutoClearSimConfig()) {
+  return normalizeAutoClearSimThreshold(config[portPath]?.threshold);
+}
+
+function shouldAutoClearSim(portPath, percentage) {
+  const config = getAutoClearSimConfig();
+  if (!config[portPath]?.enabled) {
+    return false;
+  }
+  return percentage >= getAutoClearSimThreshold(portPath, config);
+}
+
+function getAutoClearSimConfig() {
+  try {
+    if (fs.existsSync(AUTO_CLEAR_SIM_FILE)) {
+      const data = fs.readFileSync(AUTO_CLEAR_SIM_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('读取自动清空SIM配置失败:', error.message);
+  }
+  return {};
+}
+
+function saveAutoClearSimConfig(config) {
+  try {
+    fs.writeFileSync(AUTO_CLEAR_SIM_FILE, JSON.stringify(config, null, 2));
+    console.log('自动清空SIM配置已保存');
+    return true;
+  } catch (error) {
+    console.error('保存自动清空SIM配置失败:', error.message);
+    return false;
+  }
+}
+
+// 自动清空SIM空间：当SIM空间达到配置阈值时，将短信转移到磁盘，然后清空SIM
+async function autoClearSimSpace(portPath) {
+  const config = getAutoClearSimConfig();
+  if (!config[portPath] || !config[portPath].enabled) {
+    return; // 未启用自动清空
+  }
+  const threshold = getAutoClearSimThreshold(portPath, config);
+  
+  const storageInfo = moduleStates[portPath]?.storageInfo;
+  if (!storageInfo || storageInfo.percentage < threshold) {
+    return; // 未达到配置阈值
+  }
+  
+  const serial = serialConnections[portPath];
+  if (!serial || !serial.isOpen) {
+    console.log(`${portPath} 串口未连接，跳过自动清空`);
+    return;
+  }
+  
+  console.log(`${portPath} SIM空间达到 ${storageInfo.percentage}%（阈值 ${threshold}%），开始自动清空...`);
+  addCommandHistory(portPath, 'send', `自动清空SIM空间触发 (当前: ${storageInfo.percentage}%, 阈值: ${threshold}%)`);
+  
+  // 1. 先将当前SIM中的短信备份到磁盘
+  const currentMessages = moduleStates[portPath].messages || [];
+  if (currentMessages.length > 0) {
+    // 加载已有的磁盘消息
+    const existingDiskMessages = loadDiskMessages(portPath);
+    
+    // 合并消息（磁盘 + 当前SIM）
+    const allMessages = [...existingDiskMessages, ...currentMessages];
+    
+    // 去重（按 phone + content + time 去重）
+    const uniqueMessages = [];
+    const seen = new Set();
+    for (const msg of allMessages) {
+      const key = `${msg.phone}_${msg.time}_${msg.content?.substring(0, 50)}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueMessages.push({ ...msg, storageLocation: 'disk' });
+      }
+    }
+    
+    // 保存到磁盘
+    saveDiskMessages(portPath, uniqueMessages);
+    console.log(`${portPath} 已将 ${currentMessages.length} 条SIM短信备份到磁盘，磁盘共 ${uniqueMessages.length} 条`);
+  }
+  
+  // 2. 清空SIM卡中的短信
+  try {
+    const result = await deleteAllMessages(portPath);
+    if (result.success) {
+      console.log(`${portPath} SIM卡短信已清空`);
+      addCommandHistory(portPath, 'send', '自动清空SIM短信成功');
+      
+      // 清空内存中的SIM消息
+      moduleStates[portPath].messages = [];
+      moduleStates[portPath].unreadCount = 0;
+      
+      // 重新检查存储容量
+      setTimeout(() => {
+        checkStorageCapacity(portPath);
+      }, 1000);
+      
+      // 广播更新
+      broadcastUpdate();
+    } else {
+      console.error(`${portPath} 自动清空SIM短信失败:`, result.error);
+      addCommandHistory(portPath, 'error', `自动清空SIM失败: ${result.error}`);
+    }
+  } catch (error) {
+    console.error(`${portPath} 自动清空SIM短信异常:`, error.message);
+    addCommandHistory(portPath, 'error', `自动清空SIM异常: ${error.message}`);
+  }
+}
+
 // 加密函数
 function encrypt(text) {
   const iv = crypto.randomBytes(IV_LENGTH);
@@ -509,6 +715,11 @@ async function checkStorageCapacity(portPath) {
           if (percentage >= 80) {
             sendStorageWarningNotification(portPath, moduleStates[portPath].storageInfo);
           }
+          
+          // 如果存储使用率达到配置阈值且启用了自动清空SIM，触发转移
+          if (shouldAutoClearSim(portPath, percentage)) {
+            autoClearSimSpace(portPath);
+          }
         }
       }
 
@@ -537,6 +748,12 @@ initModuleSettings();
 
 // 初始化保号配置
 initKeepAliveConfig();
+
+// 初始化磁盘短信存储目录
+ensureDiskSmsDir();
+
+// 加载自动清空SIM配置
+let autoClearSimConfig = getAutoClearSimConfig();
 
 // 认证中间件
 function requireAuth(req, res, next) {
@@ -1038,6 +1255,137 @@ app.post('/api/clear-command-logs/:port', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// ========== 磁盘短信管理API ==========
+
+// 清空磁盘存储的短信
+app.post('/api/clear-disk-messages/:port', requireAuth, (req, res) => {
+  const portPath = `/dev/${req.params.port}`;
+  
+  if (!moduleStates[portPath]) {
+    return res.json({ success: false, error: '模块不存在' });
+  }
+  
+  console.log(`清空 ${portPath} 的磁盘短信`);
+  const success = clearDiskMessages(portPath);
+  
+  if (success) {
+    // 更新磁盘短信数量
+    moduleStates[portPath].diskMessageCount = 0;
+    broadcastUpdate();
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, error: '清空磁盘短信失败' });
+  }
+});
+
+// ========== 自动清空SIM空间API ==========
+
+// 获取自动清空SIM配置
+app.get('/api/auto-clear-sim/:port', requireAuth, (req, res) => {
+  const portPath = `/dev/${req.params.port}`;
+  const config = getAutoClearSimConfig();
+  
+  res.json({
+    success: true,
+    enabled: config[portPath]?.enabled || false,
+    threshold: getAutoClearSimThreshold(portPath, config)
+  });
+});
+
+// 保存自动清空SIM配置
+app.post('/api/auto-clear-sim/:port', requireAuth, (req, res) => {
+  const portPath = `/dev/${req.params.port}`;
+  const { enabled, threshold } = req.body;
+  
+  if (!moduleStates[portPath]) {
+    return res.json({ success: false, error: '模块不存在' });
+  }
+  
+  const normalizedThreshold = normalizeAutoClearSimThreshold(threshold);
+  const config = getAutoClearSimConfig();
+  config[portPath] = {
+    enabled: enabled || false,
+    threshold: normalizedThreshold
+  };
+  saveAutoClearSimConfig(config);
+  autoClearSimConfig = config;
+  
+  // 更新内存状态
+  moduleStates[portPath].autoClearSimEnabled = enabled || false;
+  moduleStates[portPath].autoClearSimThreshold = normalizedThreshold;
+  
+  console.log(`${portPath} 自动清空SIM空间: ${enabled ? '启用' : '禁用'}, 阈值: ${normalizedThreshold}%`);
+  
+  broadcastUpdate();
+  res.json({ success: true, threshold: normalizedThreshold });
+});
+
+// 手动触发SIM短信转移到磁盘
+app.post('/api/transfer-to-disk/:port', requireAuth, async (req, res) => {
+  const portPath = `/dev/${req.params.port}`;
+  
+  if (!moduleStates[portPath]) {
+    return res.json({ success: false, error: '模块不存在' });
+  }
+  
+  const serial = serialConnections[portPath];
+  if (!serial || !serial.isOpen) {
+    return res.json({ success: false, error: '串口未连接' });
+  }
+  
+  const messages = moduleStates[portPath].messages || [];
+  if (messages.length === 0) {
+    return res.json({ success: false, error: '没有需要转移的短信' });
+  }
+  
+  try {
+    // 加载已有的磁盘消息
+    const existingDiskMessages = loadDiskMessages(portPath);
+    
+    // 合并消息
+    const allMessages = [...existingDiskMessages, ...messages.map(msg => ({
+      ...msg,
+      storageLocation: 'disk'
+    }))];
+    
+    // 去重
+    const uniqueMessages = [];
+    const seen = new Set();
+    for (const msg of allMessages) {
+      const key = `${msg.phone}_${msg.time}_${msg.content?.substring(0, 50)}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueMessages.push(msg);
+      }
+    }
+    
+    // 保存到磁盘
+    const saved = saveDiskMessages(portPath, uniqueMessages);
+    
+    if (saved) {
+      // 清空SIM中的短信
+      const result = await deleteAllMessages(portPath);
+      if (result.success) {
+        moduleStates[portPath].messages = [];
+        moduleStates[portPath].unreadCount = 0;
+        moduleStates[portPath].diskMessageCount = uniqueMessages.length;
+        
+        addCommandHistory(portPath, 'send', `已将 ${messages.length} 条短信从SIM转移到磁盘`);
+        
+        broadcastUpdate();
+        res.json({ success: true, transferred: messages.length, diskTotal: uniqueMessages.length });
+      } else {
+        res.json({ success: false, error: 'SIM短信删除失败: ' + result.error });
+      }
+    } else {
+      res.json({ success: false, error: '保存到磁盘失败' });
+    }
+  } catch (error) {
+    console.error(`${portPath} 转移短信到磁盘失败:`, error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 // 4个串口配置
 const ports = [
   '/dev/ttyACM0',
@@ -1057,6 +1405,7 @@ function broadcastUpdate() {
   
   // 为每个模块添加保号配置信息
   const keepAliveConfig = getKeepAliveConfig();
+  const acConfig = getAutoClearSimConfig();
   modules.forEach(module => {
     const config = keepAliveConfig[module.port];
     if (config && config.enabled) {
@@ -1071,6 +1420,11 @@ function broadcastUpdate() {
         enabled: false
       };
     }
+    
+    // 更新磁盘短信数量和自动清空SIM状态
+    module.diskMessageCount = getDiskMessageCount(module.port);
+    module.autoClearSimEnabled = acConfig[module.port]?.enabled || false;
+    module.autoClearSimThreshold = getAutoClearSimThreshold(module.port, acConfig);
   });
   
   const data = JSON.stringify(modules);
@@ -1486,6 +1840,9 @@ function initializeModuleListeners() {
         total: 0,
         percentage: 0
       },
+      diskMessageCount: getDiskMessageCount(portPath), // 磁盘存储短信数量
+      autoClearSimEnabled: autoClearSimConfig[portPath]?.enabled || false, // 自动清空SIM开关
+      autoClearSimThreshold: getAutoClearSimThreshold(portPath, autoClearSimConfig), // 自动清空SIM阈值
       forwardSettings: savedForwardSettings, // 使用保存的设置
       multipartMessages: {} // 存储长短信片段
     };
@@ -1687,6 +2044,11 @@ function startPortListener(portPath) {
                   sendStorageWarningNotification(portPath, moduleStates[portPath].storageInfo);
                 }
                 
+                // 如果存储使用率达到配置阈值且启用了自动清空SIM，触发转移
+                if (shouldAutoClearSim(portPath, percentage)) {
+                  autoClearSimSpace(portPath);
+                }
+                
                 // 广播更新以显示存储信息
                 if (initStep === 0) {
                   broadcastUpdate();
@@ -1709,6 +2071,11 @@ function startPortListener(portPath) {
               // 如果存储使用率超过 80%，发送通知
               if (percentage >= 80) {
                 sendStorageWarningNotification(portPath, moduleStates[portPath].storageInfo);
+              }
+              
+              // 如果存储使用率达到配置阈值且启用了自动清空SIM，触发转移
+              if (shouldAutoClearSim(portPath, percentage)) {
+                autoClearSimSpace(portPath);
               }
               
               // 广播更新以显示存储信息
@@ -1984,24 +2351,34 @@ function startPortListener(portPath) {
                     percentage: total > 0 ? Math.round((used / total) * 100) : 0
                   };
                   console.log(`${portPath} 存储容量: ${used}/${total} (${moduleStates[portPath].storageInfo.percentage}%)`);
-                }
-              } else {
-                console.log(`${portPath} 使用完整格式解析 CPMS`);
-                // 使用 mem3 的容量（接收短信存储器）
-                const used = parseInt(match[5]);
-                const total = parseInt(match[6]);
-                moduleStates[portPath].storageInfo = {
+              
+                  // 如果存储使用率达到配置阈值且启用了自动清空SIM，触发转移
+                  if (moduleStates[portPath].storageInfo && shouldAutoClearSim(portPath, moduleStates[portPath].storageInfo.percentage)) {
+                    autoClearSimSpace(portPath);
+                  }
+                  }
+                  } else {
+                  console.log(`${portPath} 使用完整格式解析 CPMS`);
+                  // 使用 mem3 的容量（接收短信存储器）
+                  const used = parseInt(match[5]);
+                  const total = parseInt(match[6]);
+                  moduleStates[portPath].storageInfo = {
                   used: used,
                   total: total,
                   percentage: total > 0 ? Math.round((used / total) * 100) : 0
-                };
-                console.log(`${portPath} 存储容量: ${used}/${total} (${moduleStates[portPath].storageInfo.percentage}%)`);
-              }
-              
-              // 如果存储使用率超过 80%，发送通知
-              if (moduleStates[portPath].storageInfo && moduleStates[portPath].storageInfo.percentage >= 80) {
-                sendStorageWarningNotification(portPath, moduleStates[portPath].storageInfo);
-              }
+                  };
+                  console.log(`${portPath} 存储容量: ${used}/${total} (${moduleStates[portPath].storageInfo.percentage}%)`);
+            
+                  // 如果存储使用率达到配置阈值且启用了自动清空SIM，触发转移
+                  if (moduleStates[portPath].storageInfo && shouldAutoClearSim(portPath, moduleStates[portPath].storageInfo.percentage)) {
+                  autoClearSimSpace(portPath);
+                  }
+                  }
+          
+                  // 如果存储使用率超过 80%，发送通知
+                  if (moduleStates[portPath].storageInfo && moduleStates[portPath].storageInfo.percentage >= 80) {
+                    sendStorageWarningNotification(portPath, moduleStates[portPath].storageInfo);
+                  }
             }
             
             if (line.includes('OK') || line.includes('ERROR')) {
@@ -2497,7 +2874,7 @@ app.get('/api/modules', requireAuth, async (req, res) => {
   res.json(Object.values(moduleStates));
 });
 
-// 获取指定模块的消息
+// 获取指定模块的消息（合并SIM和磁盘消息）
 app.get('/api/messages/:port', requireAuth, async (req, res) => {
   const portPath = `/dev/${req.params.port}`;
   
@@ -2505,10 +2882,26 @@ app.get('/api/messages/:port', requireAuth, async (req, res) => {
     return res.json({ success: false, error: '模块不存在' });
   }
   
+  // 获取SIM中的短信（标记为sim）
+  const simMessages = (moduleStates[portPath].messages || []).map(msg => ({
+    ...msg,
+    storageLocation: msg.storageLocation || 'sim'
+  }));
+  
+  // 获取磁盘中的短信（已标记为disk）
+  const diskMessages = loadDiskMessages(portPath);
+  
+  // 合并并按时间倒序排列
+  const allMessages = [...simMessages, ...diskMessages].sort((a, b) => {
+    return new Date(b.received || 0) - new Date(a.received || 0);
+  });
+  
   res.json({
     success: true,
-    messages: moduleStates[portPath].messages || [],
-    unreadCount: moduleStates[portPath].unreadCount || 0
+    messages: allMessages,
+    unreadCount: moduleStates[portPath].unreadCount || 0,
+    simCount: simMessages.length,
+    diskCount: diskMessages.length
   });
 });
 
