@@ -27,3 +27,12 @@ secrets.json
 docs/*.png
 
 .npm/
+
+# Only explicitly reviewed demo screenshots may be published.
+docs/screenshots/*
+!docs/screenshots/login.png
+!docs/screenshots/overview-light.png
+!docs/screenshots/inbox.png
+!docs/screenshots/outbox.png
+!docs/screenshots/overview-dark.png
+!docs/screenshots/mobile.png

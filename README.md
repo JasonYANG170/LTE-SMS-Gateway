@@ -139,11 +139,16 @@ npm run package:update
 
 #### 后台界面图
 
-| 登录界面 | 主页 |
+以下截图来自本地隔离演示环境。手机号仅显示掩码，SIM 标识为 `DEMO`，短信均为示例；不包含真实账号、手机号、卡片标识、主机地址或业务短信。
+
+| 登录页面 | 浅色网关概览 |
 | --- | --- |
-|<img width="2217" height="1379" alt="image" src="https://github.com/user-attachments/assets/69941b26-9220-441a-a4b1-2f6c5db4ff80" />|<img width="2316" height="1397" alt="image" src="https://github.com/user-attachments/assets/1d658aa1-c71f-4181-b173-c14aaa24d46b" />|
-| 转发设置 | 收件测试 |
-|<img width="2305" height="1384" alt="image" src="https://github.com/user-attachments/assets/12e03d5d-987f-4c05-ad3a-a40a5913d806" />|<img width="1925" height="1214" alt="image" src="https://github.com/user-attachments/assets/1645c3fe-86cf-4bfc-8914-8c1a0a65c169" />|
+| ![登录页面，账号和密码为空](docs/screenshots/login.png) | ![浅色网关概览，使用演示 SIM 数据](docs/screenshots/overview-light.png) |
+| 收件箱 | 发件箱与保号 |
+| ![收件箱，号码掩码与演示短信](docs/screenshots/inbox.png) | ![发件箱、定时发送与保号配置](docs/screenshots/outbox.png) |
+| 深色网关概览 | 手机页面 |
+| ![深色网关概览](docs/screenshots/overview-dark.png) | <img src="docs/screenshots/mobile.png" alt="手机收件箱，演示数据" width="300" /> |
+
 ## 硬件
 **立创硬件开源平台**
 https://oshwhub.com/jasonyang17/sms-receive

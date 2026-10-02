@@ -137,13 +137,18 @@ npm run package:update
 
 Output: `dist/LTE-SMS-Gateway-update.json`. Tests use simulated serial ports and do not send real messages.
 
-#### Backend interface diagram
+#### Backend screenshots
 
-| Login interface | Home page |
+Screenshots are captured in a local, isolated demo environment. Phone numbers are masked, SIM identifiers use `DEMO`, and messages are fictional. No real credentials, phone numbers, SIM identifiers, host addresses or business messages are shown.
+
+| Sign-in page | Light gateway overview |
 | --- | --- |
-|<img width="2217" height="1379" alt="image" src="https://github.com/user-attachments/assets/69941b26-9220-441a-a4b1-2f6c5db4ff80" />|<img width="2316" height="1397" alt="image" src="https://github.com/user-attachments/assets/1d658aa1-c71f-4181-b173-c14aaa24d46b" />|
-| Forwarding settings | SMS reception test |
-|<img width="2305" height="1384" alt="image" src="https://github.com/user-attachments/assets/12e03d5d-987f-4c05-ad3a-a40a5913d806" />|<img width="1925" height="1214" alt="image" src="https://github.com/user-attachments/assets/1645c3fe-86cf-4bfc-8914-8c1a0a65c169" />|
+| ![Sign-in page with empty credentials](docs/screenshots/login.png) | ![Light overview with demo SIM data](docs/screenshots/overview-light.png) |
+| Inbox | Outbox and SIM keep-alive |
+| ![Inbox with masked numbers and demo messages](docs/screenshots/inbox.png) | ![Compose, scheduled messages and keep-alive settings](docs/screenshots/outbox.png) |
+| Dark gateway overview | Mobile layout |
+| ![Dark gateway overview](docs/screenshots/overview-dark.png) | <img src="docs/screenshots/mobile.png" alt="Mobile inbox with demo data" width="300" /> |
+
 ## hardware
 **OSHWLab / JLC Open Source Hardware Platform**
 https://oshwhub.com/jasonyang17/sms-receive
