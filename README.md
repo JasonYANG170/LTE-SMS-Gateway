@@ -1,3 +1,5 @@
+[简体中文](README.md) | [English](README_en.md)
+
 <div align="center">
     <h1>LTE&amp;SMS-Gateway 4G多路聚合网关</h1>
 
