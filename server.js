@@ -8,7 +8,9 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 5823;
+const runtimeConfig = fs.existsSync(path.join(__dirname, 'gateway-config.json')) ? JSON.parse(fs.readFileSync(path.join(__dirname, 'gateway-config.json'), 'utf8')) : {};
+const PORT = Number(process.env.PORT || runtimeConfig.port || 5823);
+let workspace;
 
 // 解析JSON请求体
 app.use(express.json());
@@ -74,7 +76,7 @@ function saveDiskMessages(portPath, messages) {
   try {
     ensureDiskSmsDir();
     const filePath = getDiskSmsFile(portPath);
-    const jsonStr = JSON.stringify(messages, null, 2);
+    const jsonStr = JSON.stringify(messages.map(message => ({...message, simIccid: message.simIccid || moduleStates[portPath]?.iccid || ''})), null, 2);
     const encrypted = encrypt(jsonStr);
     fs.writeFileSync(filePath, encrypted);
     console.log(`${portPath} 已保存 ${messages.length} 条短信到磁盘`);
@@ -165,6 +167,7 @@ function saveAutoClearSimConfig(config) {
 
 // 自动清空SIM空间：当SIM空间达到配置阈值时，将短信转移到磁盘，然后清空SIM
 async function autoClearSimSpace(portPath) {
+  if (workspace?.queryLocks.has(portPath) || sendMessageLocks[portPath]) return;
   const config = getAutoClearSimConfig();
   if (!config[portPath] || !config[portPath].enabled) {
     return; // 未启用自动清空
@@ -653,6 +656,7 @@ async function sendStorageWarningNotification(portPath, storageInfo) {
 
 // 检查存储容量
 async function checkStorageCapacity(portPath) {
+  if (workspace?.queryLocks.has(portPath)) return;
   return new Promise((resolve) => {
     const serial = serialConnections[portPath];
     if (!serial || !serial.isOpen) {
@@ -1440,6 +1444,7 @@ function broadcastUpdate() {
 
 // 添加命令历史记录
 function addCommandHistory(portPath, type, data) {
+  if (!['send', 'receive'].includes(type)) workspace?.recordLog(portPath, type, data);
   if (!moduleStates[portPath]) return;
   
   const history = {
@@ -1458,6 +1463,7 @@ function addCommandHistory(portPath, type, data) {
 
 // 发送命令并记录
 function sendCommand(portPath, command) {
+  if (workspace?.queryLocks.has(portPath)) { workspace.deferCommand(portPath, command); return; }
   const serial = serialConnections[portPath];
   if (!serial || !serial.isOpen) {
     console.error(`${portPath} 串口未打开，无法发送命令: ${command}`);
@@ -1898,6 +1904,11 @@ function startPortListener(portPath) {
       stopBits: 1,
       autoOpen: false
     });
+    const originalWrite = serial.write.bind(serial);
+    serial.write = (data, ...args) => {
+      workspace?.recordLog(portPath, 'send', Buffer.isBuffer(data) ? data.toString() : data);
+      return originalWrite(data, ...args);
+    };
 
     let buffer = '';
     let initStep = 0;
@@ -1970,6 +1981,7 @@ function startPortListener(portPath) {
 
     serial.on('data', (data) => {
       const rawData = data.toString();
+      workspace?.recordLog(portPath, 'receive', rawData);
       buffer += rawData;
       
       // 实时打印接收到的原始数据
@@ -2698,7 +2710,15 @@ function generatePDU(phone, message) {
 }
 
 // 发送短信
-async function sendMessage(portPath, phone, message) {
+async function sendMessage(portPath, phone, message, source = 'manual') {
+  if (workspace?.isMaintaining()) return {success:false,error:'维护任务正在运行，请稍后发送'};
+  if (workspace?.queryLocks.has(portPath)) return { success: false, error: '正在读取 SIM 详情，请稍后发送' };
+  const result = await sendMessageRaw(portPath, phone, message);
+  workspace?.recordSent(portPath, phone, message, result, source);
+  return result;
+}
+
+async function sendMessageRaw(portPath, phone, message) {
   // 检查是否有正在进行的发送任务
   if (sendMessageLocks[portPath]) {
     console.log(`${portPath} 有正在进行的短信发送任务，拒绝新请求`);
@@ -2815,6 +2835,7 @@ async function sendMessage(portPath, phone, message) {
 
 // 删除所有短信
 async function deleteAllMessages(portPath) {
+  if (workspace?.queryLocks.has(portPath) || sendMessageLocks[portPath]) return {success:false,error:'模块正在执行其他任务，请稍后重试'};
   return new Promise((resolve) => {
     const result = {
       success: false,
@@ -3148,7 +3169,7 @@ async function sendKeepAliveSMS(portPath, config) {
   
   console.log(`${portPath} 发送保号短信到: ${config.targetPhone}`);
   
-  const result = await sendMessage(portPath, config.targetPhone, config.message);
+  const result = await sendMessage(portPath, config.targetPhone, config.message, 'keep-alive');
   
   if (result.success) {
     console.log(`${portPath} 保号短信发送成功`);
@@ -3395,6 +3416,18 @@ app.post('/api/reconnect/:port', requireAuth, async (req, res) => {
 });
 
 // 启动HTTP服务器
+workspace = require('./gateway-workspace').createWorkspace({
+  root: __dirname, modules: moduleStates, serial: serialConnections, diskDir: DISK_SMS_DIR,
+  encrypt, decrypt, loadDiskMessages, saveDiskMessages, sendMessage, sendCommand,
+  isSending: port => Boolean(sendMessageLocks[port]), broadcast: broadcastUpdate,
+  canRestart: Boolean(runtimeConfig.restartScript && fs.existsSync(runtimeConfig.restartScript)),
+  restart: () => {
+    const helper = require('child_process').spawn('/bin/bash', [runtimeConfig.restartScript, String(process.pid)], {detached:true,stdio:'ignore'});
+    helper.unref();
+    setTimeout(() => {stopAllKeepAliveTasks();Object.values(serialConnections).forEach(serial => {if(serial.isOpen)serial.close();});process.exit(0);},1000);
+  },
+});
+workspace.register(app, requireAuth);
 const server = app.listen(PORT, () => {
   console.log(`服务器运行在 http://localhost:${PORT}`);
   // 初始化模块监听

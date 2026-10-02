@@ -5,3 +5,25 @@ package-lock.json
 credentials.json
 notification.json
 module-settings.json
+gateway-config.json
+workspace-data/
+disk-sms/
+keep-alive.json
+auto-clear-sim.json
+ui-backups/
+dist/
+
+# Private material and local-only previews
+.env
+.env.*
+secrets.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.enc
+*.tar.gz
+*.jsonl
+docs/*.png
+
+.npm/

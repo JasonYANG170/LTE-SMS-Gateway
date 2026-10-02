@@ -1,0 +1,90 @@
+.sidebar nav { flex:1; min-height:0; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; padding-bottom:12px; }
+.sidebar .nav-group-title { margin:17px 12px 5px; }
+.sidebar .nav-group-title:first-child { margin-top:0; }
+.sidebar nav button { min-height:35px; padding:6px 12px; }
+.sidebar-bottom { flex-shrink:0; }
+.ws-panel { padding:23px; background:var(--surface); border:1px solid var(--line); border-radius:12px; margin-bottom:20px; min-width:0; }
+.ws-panel h2 { font-size:17px; margin-bottom:16px; font-weight:650; }
+.ws-panel p { margin:10px 0; }
+.ws-panel-head { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+.ws-columns,.ws-three-columns,.ws-sim-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.ws-three-columns { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.muted { color:var(--muted); font-size:12px; line-height:1.7; }
+.notice { background:var(--good-bg); color:var(--good); border:1px solid var(--line); border-radius:9px; padding:12px 16px; margin-bottom:20px; overflow-wrap:anywhere; }
+.notice.error { background:var(--danger-bg); color:var(--danger); }
+.ws-button { display:inline-flex; align-items:center; justify-content:center; gap:7px; background:var(--primary); color:white; border:1px solid transparent; padding:9px 14px; border-radius:7px; font-size:12px; text-decoration:none; cursor:pointer; min-height:36px; }
+.ws-button.secondary { background:var(--surface); color:var(--ink); border-color:var(--line); }
+.ws-button:hover { filter:brightness(1.08); }
+.ws-button:disabled { opacity:.5; }
+.ws-link { border:0; background:none; padding:6px 0; color:var(--accent); font-size:12px; cursor:pointer; text-decoration:none; }
+.ws-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:16px; }
+.ws-field { display:flex; flex-direction:column; gap:7px; font-size:12px; color:var(--muted); margin-bottom:17px; min-width:0; }
+.ws-field input,.ws-field select,.ws-field textarea { padding:10px 12px; width:100%; min-width:0; color:var(--ink); background:var(--surface); font-size:13px; border:1px solid var(--line); border-radius:7px; }
+.ws-field textarea { resize:vertical; }
+.ws-check { display:flex; gap:10px; align-items:center; font-size:13px; margin:14px 0 20px; }
+.ws-check input { width:17px; height:17px; accent-color:var(--primary); }
+.ws-toolbar { display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px; }
+.ws-toolbar .ws-field { margin:0; min-width:160px; }
+.ws-grow { flex:1; }
+.ws-facts { margin:0; }
+.ws-facts > div { display:grid; grid-template-columns:125px minmax(0,1fr); gap:12px; padding:11px 0; border-bottom:1px solid var(--line); font-size:12px; }
+.ws-facts > div:last-child { border-bottom:0; }
+.ws-facts dt { color:var(--muted); }
+.ws-facts dd { margin:0; color:var(--ink); overflow-wrap:anywhere; }
+.ws-empty { padding:38px 20px; text-align:center; color:var(--muted); }
+.ws-empty > span { font-size:30px; color:var(--accent); }
+.ws-empty h3 { margin:10px 0; color:var(--ink); font-size:16px; }
+.ws-empty p { font-size:12px; }
+.ws-badge { display:inline-block; background:var(--soft); color:var(--accent); border-radius:5px; font-size:10px; padding:3px 7px; white-space:nowrap; }
+.mail-layout { display:grid; grid-template-columns:minmax(280px,.85fr) minmax(0,1.15fr); gap:20px; align-items:start; }
+.mail-list { padding:0; overflow:hidden; }
+.mail-list-heading { padding:15px 20px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
+.mail-row { display:flex; border-bottom:1px solid var(--line); min-width:0; position:relative; }
+.mail-row:last-child { border:0; }
+.mail-row.selected { background:var(--soft); box-shadow:inset 3px 0 var(--primary); }
+.mail-row-main { padding:17px 16px; background:none; color:var(--ink); border:0; flex:1; min-width:0; text-align:left; cursor:pointer; }
+.mail-row-main > div { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+.mail-row-main strong { font-weight:500; font-size:13px; }
+.mail-row.unread strong { font-weight:700; }
+.mail-row.unread strong::before { content:''; display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--primary); margin-right:7px; }
+.mail-row-main time { font-size:10px; color:var(--muted); }
+.mail-row-main p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:12px; margin:7px 0; }
+.mail-row-main small { display:block; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
+.mail-star { align-self:flex-start; margin:15px 12px 0 0; border:0; background:none; color:var(--muted); font-size:19px; cursor:pointer; }
+.mail-star.starred { color:var(--warning); }
+.message-content { white-space:pre-wrap; overflow-wrap:anywhere; font-size:15px; line-height:1.8; margin:25px 0; }
+.raw-response { margin-top:20px; color:var(--muted); font-size:12px; }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+.raw-response pre { background:var(--soft); padding:12px; border-radius:7px; color:var(--ink); margin-top:10px; }
+.ws-table-wrap { overflow-x:auto; }
+.ws-table-wrap table { width:100%; border-collapse:collapse; font-size:12px; }
+.ws-table-wrap th { padding:12px; text-align:left; color:var(--muted); font-weight:500; border-bottom:1px solid var(--line); }
+.ws-table-wrap td { padding:14px 12px; border-bottom:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere; max-width:350px; }
+.ws-table-wrap td small { display:block; font-size:10px; margin-top:5px; }
+.ws-table-wrap td pre { margin:0; }
+.message-cell { min-width:120px; }
+.error-text { color:var(--danger); }
+.ws-capacity { display:flex; gap:10px; align-items:baseline; margin-bottom:14px; }
+.ws-capacity strong { font-size:28px; font-weight:600; }
+.ws-capacity span { color:var(--muted); font-size:11px; }
+progress { display:block; width:100%; height:8px; accent-color:var(--primary); margin:16px 0; border:0; border-radius:5px; overflow:hidden; }
+progress::-webkit-progress-bar { background:var(--line); }
+progress::-webkit-progress-value { background:var(--primary); }
+.ws-gauge { width:130px; height:130px; border-radius:50%; background:conic-gradient(var(--accent) var(--gauge),var(--line) 0); display:grid; place-items:center; margin:20px auto; position:relative; }
+.ws-gauge::before { content:''; position:absolute; inset:9px; border-radius:50%; background:var(--surface); }
+.ws-gauge strong { position:relative; font-size:24px; font-weight:600; }
+.ws-terminal { background:var(--bg); border:1px solid var(--line); padding:16px; border-radius:8px; color:var(--ink); max-height:620px; overflow:auto; line-height:1.7; margin-top:15px; }
+.ws-terminal .log-error,.ws-terminal .log-sms_error { color:var(--danger); }
+.ws-terminal .log-send { color:var(--accent); }
+.ws-terminal .log-sms_sent { color:var(--good); }
+#keepalivePreview { padding:12px; background:var(--soft); border-radius:8px; margin-bottom:18px; }
+#keepalivePreview .keep-alive-days,#keepalivePreview .days-number,#keepalivePreview .days-unit,#keepalivePreview .hours-number,#keepalivePreview .hours-unit { color:var(--countdown-color); }
+#keepalivePreview .keep-alive-info { margin:0; }
+@media(max-width:1100px) { .ws-three-columns { grid-template-columns:1fr; } .mail-layout { grid-template-columns:1fr; } }
+@media(max-width:760px) { .ws-columns,.ws-sim-grid { grid-template-columns:1fr; } .ws-panel { padding:18px; } .mail-list { padding:0; } .ws-facts > div { grid-template-columns:100px minmax(0,1fr); } }
+@media(max-width:620px) { .sidebar nav { overflow-x:auto; overflow-y:hidden; flex-wrap:nowrap; justify-content:flex-start; margin-top:17px; padding-bottom:5px; } .sidebar nav button { flex:0 0 auto; width:auto; min-width:90px; white-space:nowrap; } .sidebar .nav-group-title { display:none; } .ws-toolbar .ws-field { flex:1; min-width:130px; } .mail-layout { gap:14px; } .mail-row-main time { font-size:9px; } .ws-panel { margin-bottom:16px; } .ws-table-wrap td,.ws-table-wrap th { padding:10px 7px; } }
+
+.language-control { margin-left: auto; }
+.topbar { gap: 14px; flex-wrap: wrap; }
+.login-language { position: fixed; right: 190px; top: 24px; z-index: 10; }
+@media(max-width:600px){.topbar .breadcrumb{width:100%;}.login-language{right:auto;left:20px;}.language-control{margin-left:0;}}

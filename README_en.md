@@ -25,35 +25,117 @@ An LTE and SMS multi-channel gateway based on Cat.1 modules.
 - ✅Supports SMS sending function and can send SMS to the target SIM
 - ✅Supports signal monitoring, can insert SIMs of different operators to monitor base station signal strength
 - ✅Supports configuration persistence, module forwarding settings are automatically saved (sensitive information is encrypted and stored)
+- ✅Dedicated pages for host information, automatic SIM details, inbox, outbox, favorites, forwarding and communication logs
+- ✅Scheduled messages, SIM keep-alive, streaming backup/restore and host/SIM storage cleanup
+- ✅Chinese / English, light / dark / system themes, mobile layouts and Release update packages
 - 🚧Docker container deployment (to be supported)
 
 This project does not have a built-in MCU and must be used with a Linux host computer or NAS server.
 If you encounter any problems, please submit issues to me
 ## software
 **LTE&SMS Aggregation Gateway Management Panel:**
-https://github.com/JasonYANG170/LTE&SMS-Gateway  
+https://github.com/JasonYANG170/LTE-SMS-Gateway
 The management backend of this project is developed based on NodeJS and is suitable for use on servers based on Linux systems.
 After deployment, open port 5823 on the server to access the management panel.
 
 
-#### Software deployment
-1. Debugging and deployment is relatively simple. First use the `cd` command to enter the project directory.
-2. Install the server environment
-```
-sudo apt update
-sudo apt install nodejs
-npm install
-```
-3. Start
-```
+### Manual deployment (Linux)
+
+Use a Linux host with USB serial access, [Node.js 22 or 24 LTS](https://nodejs.org/en/download), npm and Git.
+
+```bash
+git clone https://github.com/JasonYANG170/LTE-SMS-Gateway.git
+cd LTE-SMS-Gateway
+git checkout v3.1.0
+npm install --omit=dev
 npm start
 ```
-#### Default configuration
 
-Service port: `5823`
-Account: `root`
-Password: `password`
-For external access, you can configure a reverse proxy with Nginx.
+Open `http://<host>:5823/login.html`. The initial credentials are `root / password`; change them in Settings after signing in. Override the port with `PORT=8080 npm start` or a local, untracked `gateway-config.json`:
+
+```json
+{"port":5823}
+```
+
+Add the service user to the serial-device group and sign in again. Debian/Ubuntu normally use `dialout`; check `ls -l /dev/ttyACM* /dev/ttyUSB*` and adjust for your NAS distribution.
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+For systemd, place the application at `/opt/lte-sms-gateway`. The supplied unit expects Node.js in `/usr/local/bin` or `/usr/bin`; adjust `Environment` / `ExecStart` if needed.
+
+```bash
+sudo cp -a "$PWD" /opt/lte-sms-gateway
+sudo useradd --system --user-group --home-dir /opt/lte-sms-gateway --shell /usr/sbin/nologin lte-sms-gateway
+sudo usermod -aG dialout lte-sms-gateway
+sudo chown -R lte-sms-gateway:lte-sms-gateway /opt/lte-sms-gateway
+sudo chmod 750 /opt/lte-sms-gateway/scripts/restart-systemd.sh
+sudo cp /opt/lte-sms-gateway/deploy/lte-sms-gateway.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now lte-sms-gateway
+```
+
+To install backend updates from the UI, configure the restart entry point:
+
+```json
+{"port":5823,"restartScript":"/opt/lte-sms-gateway/scripts/restart-systemd.sh"}
+```
+
+The helper relies on `Restart=always` in the systemd unit. BaoTa, PM2 and other process managers require their own restart helper.
+
+### One-command installation
+
+For Debian/Ubuntu running systemd, on x86_64 or aarch64/arm64. Requires curl and sudo/root. The installer installs system dependencies, downloads Node.js 24.21.0 from the official site, verifies SHA-256, deploys the selected release and configures serial access and startup.
+
+```bash
+curl -fL https://github.com/JasonYANG170/LTE-SMS-Gateway/releases/download/v3.1.0/install.sh -o install.sh
+sudo bash install.sh
+```
+
+Optional location and port:
+
+```bash
+sudo bash install.sh --dir /opt/lte-sms-gateway --port 8080 --ref v3.1.0
+```
+
+Defaults: application `/opt/lte-sms-gateway`, dedicated Node.js `/opt/lte-sms-gateway-node`, service `lte-sms-gateway`. Existing application directories, dedicated runtimes and services are never overwritten; use the application's update page for existing installations. `bash install.sh --check` checks basic prerequisites and parameters without changing files.
+
+```bash
+sudo systemctl status lte-sms-gateway
+sudo journalctl -u lte-sms-gateway -n 100
+sudo systemctl restart lte-sms-gateway
+```
+
+### Release assets and upgrades
+
+Download assets from [GitHub Releases](https://github.com/JasonYANG170/LTE-SMS-Gateway/releases):
+
+- `LTE-SMS-Gateway-update.json`: import in Application update, or install after checking online updates.
+- `LTE-SMS-Gateway-v3.1.0.tar.gz`: source distribution for manual installation; not a UI update package.
+- `install.sh`: fresh-install script.
+- `SHA256SUMS.txt`: asset checksums; run `sha256sum -c SHA256SUMS.txt` alongside downloaded assets.
+
+Update packages exclude accounts, device configuration, messages, backups and logs. Paths, SHA-256 and JavaScript syntax are verified and a snapshot is saved before installation. A v2.x deployment does not have the new update API: stop it, back it up, replace application source, install dependencies and restart, preserving these runtime files:
+
+```text
+credentials.json          notification.json        module-settings.json
+gateway-config.json       keep-alive.json          auto-clear-sim.json
+disk-sms/                 workspace-data/          ui-backups/
+```
+
+The service user must own the application directory. Restrict sensitive file permissions. Downloaded SMS backups contain plaintext. Historical encryption uses a compatible fixed scheme; encryption is not a replacement for host file permissions. Never commit runtime data or expose it through a static file server.
+
+Build and isolated tests:
+
+```bash
+npm install
+npm run test:workspace
+npm run test:ui        # Chrome required; set UI_BROWSER_PATH for a custom executable
+npm run package:update
+```
+
+Output: `dist/LTE-SMS-Gateway-update.json`. Tests use simulated serial ports and do not send real messages.
 
 #### Backend interface diagram
 

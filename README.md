@@ -25,35 +25,117 @@
 - ✅支持SMS发送功能，可向目标SIM发送SMS
 - ✅支持信号监测，可插入不同运营商SIM，监测基站信号强度
 - ✅支持配置持久化，模块转发设置自动保存（敏感信息加密存储）
+- ✅独立页面管理主机信息、SIM 概览 / 自动解析详情、收件箱、发件箱、收藏夹、转发和通讯日志
+- ✅定时发件、周期保号、短信流式备份与恢复、主机 / SIM 存储清理及自动转存
+- ✅中文 / English、浅色 / 深色 / 跟随系统主题、移动端布局与 Release 升级包
 - 🚧Docker容器部署（待支持）
 
 本项目无内置MCU，须搭配Linux上位机或NAS服务器使用
 如遇问题，请向我提出issues
 ## 软件
 **LTE&SMS聚合网关管理面板：**   
-https://github.com/JasonYANG170/LTE&SMS-Gateway  
+https://github.com/JasonYANG170/LTE-SMS-Gateway
 本项目管理后台基于NodeJS开发，适用于基于Linux系统的服务器使用  
 服务器部署后进入本地5823端口打开管理后台
 
 
-#### 软件部署
-1. 调试部署较为简单，先使用`cd`指令进入项目目录  
-2. 安装服务器环境  
-```
-sudo apt update
-sudo apt install nodejs
-npm install
-```
-3. 启动  
-```
+### 手动部署（Linux）
+
+需要 Linux 主机、USB 串口访问权限，以及 [Node.js 22 或 24 LTS](https://nodejs.org/en/download)、npm、Git。以下以安装目录 `/opt/lte-sms-gateway` 为例。普通用户调试也可使用自己的目录。
+
+```bash
+git clone https://github.com/JasonYANG170/LTE-SMS-Gateway.git
+cd LTE-SMS-Gateway
+git checkout v3.1.0
+npm install --omit=dev
 npm start
 ```
-#### 默认配置
 
-服务端口：`5823`  
-账户：`root`  
-密码：`password`  
-如有外部访问需求，可使用Nginx添加反代
+打开 `http://<主机IP>:5823/login.html`。首次登录为 `root / password`，登录后在“系统设置”中修改账号和密码。自定义端口可以使用 `PORT=8080 npm start`，或创建不提交到 Git 的 `gateway-config.json`：
+
+```json
+{"port":5823}
+```
+
+Linux 串口通常属于 `dialout` 组；为运行服务的用户添加该组，然后重新登录。可使用 `ls -l /dev/ttyACM* /dev/ttyUSB*` 检查模块和权限。部分 NAS 使用其他串口组，按系统实际配置调整。
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+长期运行建议使用 systemd。下面配置使用专用服务用户；请将项目复制到 `/opt/lte-sms-gateway`，并确保 `node` 在 `/usr/local/bin` 或 `/usr/bin` 中。其他位置需要修改 service 文件中的 `Environment` / `ExecStart`。
+
+```bash
+sudo cp -a "$PWD" /opt/lte-sms-gateway
+sudo useradd --system --user-group --home-dir /opt/lte-sms-gateway --shell /usr/sbin/nologin lte-sms-gateway
+sudo usermod -aG dialout lte-sms-gateway
+sudo chown -R lte-sms-gateway:lte-sms-gateway /opt/lte-sms-gateway
+sudo chmod 750 /opt/lte-sms-gateway/scripts/restart-systemd.sh
+sudo cp /opt/lte-sms-gateway/deploy/lte-sms-gateway.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now lte-sms-gateway
+```
+
+若要使用网页安装含后端的升级包，`gateway-config.json` 还需配置重启入口：
+
+```json
+{"port":5823,"restartScript":"/opt/lte-sms-gateway/scripts/restart-systemd.sh"}
+```
+
+此脚本配合 service 的 `Restart=always` 工作。使用宝塔、PM2 或其他进程管理器时，需要提供对应的重启脚本，不应直接使用此 systemd 配置。
+
+### 一键脚本部署
+
+适用于运行 systemd 的 Debian / Ubuntu，支持 x86_64 和 aarch64 / arm64。首次执行需要 `curl` 和 sudo / root 权限。脚本自动安装系统依赖，从 Node.js 官方下载 Node.js 24.21.0 并校验 SHA-256，部署指定版本，配置串口权限和 systemd 开机自启动。
+
+```bash
+curl -fL https://github.com/JasonYANG170/LTE-SMS-Gateway/releases/download/v3.1.0/install.sh -o install.sh
+sudo bash install.sh
+```
+
+可选安装位置和端口：
+
+```bash
+sudo bash install.sh --dir /opt/lte-sms-gateway --port 8080 --ref v3.1.0
+```
+
+默认安装路径 `/opt/lte-sms-gateway`，专用 Node.js 路径 `/opt/lte-sms-gateway-node`，服务名 `lte-sms-gateway`。脚本不替换系统原有 Node.js；已有目标目录、专用运行时或同名服务时拒绝覆盖，旧部署请使用网页升级功能。`bash install.sh --check` 仅检查基础环境和参数，不安装或修改文件。
+
+```bash
+sudo systemctl status lte-sms-gateway
+sudo journalctl -u lte-sms-gateway -n 100
+sudo systemctl restart lte-sms-gateway
+```
+
+### Release 升级包与数据保留
+
+在 [GitHub Releases](https://github.com/JasonYANG170/LTE-SMS-Gateway/releases) 下载：
+
+- `LTE-SMS-Gateway-update.json`：工作台升级包，在侧边栏“应用升级”中本地导入，或通过在线检查更新安装。
+- `LTE-SMS-Gateway-v3.1.0.tar.gz`：源码部署包，适用于手动安装；不是网页升级包。
+- `install.sh`：一键部署脚本。
+- `SHA256SUMS.txt`：上述附件的完整性校验值；在下载目录执行 `sha256sum -c SHA256SUMS.txt`。
+
+升级包不包含账号、设备配置、短信、备份或日志。安装前校验文件路径、SHA-256 和 JavaScript 语法并保存快照。已有 v2.x 安装没有新升级接口，需要停服后备份并手动替换应用源码、安装依赖、启动服务；保留以下数据，不要用新安装目录覆盖它们：
+
+```text
+credentials.json          notification.json        module-settings.json
+gateway-config.json       keep-alive.json          auto-clear-sim.json
+disk-sms/                 workspace-data/          ui-backups/
+```
+
+运行目录应由服务用户拥有，敏感文件限制读取权限。备份下载包含短信明文。历史版本使用兼容的固定加密方案，文件加密不能替代主机文件权限；不要提交运行数据或将运行目录暴露为静态文件服务。
+
+源码打包和隔离测试：
+
+```bash
+npm install
+npm run test:workspace
+npm run test:ui        # 需要本机 Chrome，可用 UI_BROWSER_PATH 指定可执行文件
+npm run package:update
+```
+
+升级包生成于 `dist/LTE-SMS-Gateway-update.json`。测试使用模拟串口，不发送真实短信。
 
 #### 后台界面图
 

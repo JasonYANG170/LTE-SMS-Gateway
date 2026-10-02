@@ -4,11 +4,15 @@ let reconnectInterval;
 let heartbeatInterval;
 
 function connect() {
+  clearInterval(reconnectInterval);
+  clearInterval(heartbeatInterval);
+  updateGatewayConnection('connecting');
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}`);
   
   ws.onopen = () => {
     clearInterval(reconnectInterval);
+    updateGatewayConnection('connected');
     
     // 启动心跳
     heartbeatInterval = setInterval(() => {
@@ -25,6 +29,7 @@ function connect() {
     
     try {
       const modules = JSON.parse(event.data);
+      if (!Array.isArray(modules)) return;
       updateModules(modules);
       updateLastUpdateTime();
     } catch (error) {
@@ -34,6 +39,7 @@ function connect() {
   
   ws.onclose = () => {
     clearInterval(heartbeatInterval);
+    updateGatewayConnection('disconnected');
     reconnectInterval = setInterval(() => {
       connect();
     }, 3000);
@@ -45,16 +51,8 @@ function connect() {
 }
 
 function updateModules(modules) {
-  const grid = document.getElementById('modulesGrid');
-  grid.innerHTML = '';
-  
-  // 保存模块数据到全局变量
   window.modulesData = modules;
-  
-  modules.forEach((module, index) => {
-    const card = createModuleCard(module, index + 1);
-    grid.appendChild(card);
-  });
+  updateGatewayOverview(modules);
 }
 
 function createModuleCard(module, index) {
@@ -79,7 +77,7 @@ function createModuleCard(module, index) {
       <div class="module-title">LTE模块 ${index}</div>
       <div class="status-badge status-${module.status}">
         ${statusText[module.status] || module.status}
-        ${module.unreadCount > 0 ? ` <span style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.85em; margin-left: 4px;">${module.unreadCount}条新消息</span>` : ''}
+        ${module.unreadCount > 0 ? ` <span style="background: var(--danger); color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.85em; margin-left: 4px;">${module.unreadCount}条新消息</span>` : ''}
       </div>
     </div>
     
@@ -172,31 +170,31 @@ function createModuleCard(module, index) {
             <div class="stat-label">SIM短信数</div>
           </div>
           <div class="stat-item">
-            <div class="stat-value" style="color: #16a34a;">${module.diskMessageCount || 0}</div>
+            <div class="stat-value" style="color: var(--good);">${module.diskMessageCount || 0}</div>
             <div class="stat-label">磁盘短信数</div>
           </div>
           <div class="stat-item">
-            <div class="stat-value" style="color: #ef4444;">${module.unreadCount || 0}</div>
+            <div class="stat-value" style="color: var(--danger);">${module.unreadCount || 0}</div>
             <div class="stat-label">未读短信</div>
           </div>
         </div>
         
         <!-- 存储容量信息 -->
         ${module.storageInfo && module.storageInfo.total > 0 ? `
-          <div style="background: ${module.storageInfo.percentage >= 90 ? '#fee2e2' : module.storageInfo.percentage >= 80 ? '#fef3c7' : '#f0fdf4'}; padding: 12px; border-radius: 8px; margin-top: 12px; border: 2px solid ${module.storageInfo.percentage >= 90 ? '#fca5a5' : module.storageInfo.percentage >= 80 ? '#fde047' : '#86efac'};">
+          <div style="background: ${module.storageInfo.percentage >= 90 ? 'var(--danger-bg)' : module.storageInfo.percentage >= 80 ? 'var(--warning-bg)' : 'var(--good-bg)'}; padding: 12px; border-radius: 8px; margin-top: 12px; border: 2px solid ${module.storageInfo.percentage >= 90 ? 'var(--line)' : module.storageInfo.percentage >= 80 ? 'var(--line)' : 'var(--line)'};">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 0.9em; color: ${module.storageInfo.percentage >= 90 ? '#991b1b' : module.storageInfo.percentage >= 80 ? '#92400e' : '#166534'}; font-weight: 600;">
+              <span style="font-size: 0.9em; color: ${module.storageInfo.percentage >= 90 ? 'var(--danger)' : module.storageInfo.percentage >= 80 ? 'var(--warning)' : 'var(--good)'}; font-weight: 600;">
                 💾 存储容量
               </span>
-              <span style="font-size: 0.85em; color: ${module.storageInfo.percentage >= 90 ? '#991b1b' : module.storageInfo.percentage >= 80 ? '#92400e' : '#166534'};">
+              <span style="font-size: 0.85em; color: ${module.storageInfo.percentage >= 90 ? 'var(--danger)' : module.storageInfo.percentage >= 80 ? 'var(--warning)' : 'var(--good)'};">
                 ${module.storageInfo.used}/${module.storageInfo.total} (${module.storageInfo.percentage}%)
               </span>
             </div>
-            <div style="background: white; height: 8px; border-radius: 4px; overflow: hidden;">
-              <div style="background: ${module.storageInfo.percentage >= 90 ? '#ef4444' : module.storageInfo.percentage >= 80 ? '#f59e0b' : '#10b981'}; height: 100%; width: ${module.storageInfo.percentage}%; transition: width 0.3s ease;"></div>
+            <div style="background: var(--surface); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: ${module.storageInfo.percentage >= 90 ? 'var(--danger)' : module.storageInfo.percentage >= 80 ? 'var(--warning)' : 'var(--primary)'}; height: 100%; width: ${module.storageInfo.percentage}%; transition: width 0.3s ease;"></div>
             </div>
             ${module.storageInfo.percentage >= 80 ? `
-              <div style="margin-top: 8px; font-size: 0.85em; color: ${module.storageInfo.percentage >= 90 ? '#991b1b' : '#92400e'};">
+              <div style="margin-top: 8px; font-size: 0.85em; color: ${module.storageInfo.percentage >= 90 ? 'var(--danger)' : 'var(--warning)'};">
                 ${module.storageInfo.percentage >= 90 ? '⚠️ 存储空间严重不足，请及时清理' : '⚠️ 存储空间不足，建议清理'}
               </div>
             ` : ''}
@@ -205,7 +203,7 @@ function createModuleCard(module, index) {
         
         <!-- 自动清空SIM状态 -->
         ${module.autoClearSimEnabled ? `
-          <div style="background: #fff1f2; padding: 8px 12px; border-radius: 8px; margin-top: 8px; border: 1px solid #fecaca; display: flex; align-items: center; gap: 6px; font-size: 0.85em; color: #991b1b;">
+          <div style="background: var(--danger-bg); padding: 8px 12px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--line); display: flex; align-items: center; gap: 6px; font-size: 0.85em; color: var(--danger);">
             🔄 自动清空SIM空间已启用（${module.autoClearSimThreshold || 99}%）
           </div>
         ` : ''}
@@ -245,6 +243,7 @@ function createModuleCard(module, index) {
 
 // 显示日志
 function showLogs(port, moduleIndex) {
+  return window.MailWorkspace.open('logs', {port});
   const module = window.modulesData ? window.modulesData[moduleIndex - 1] : null;
   const commandHistory = module && Array.isArray(module.commandHistory) ? module.commandHistory : [];
   
@@ -260,7 +259,7 @@ function showLogs(port, moduleIndex) {
       <div class="modal-body">
         ${commandHistory.length > 0 ? `
           <div style="margin-bottom: 16px;">
-            <button class="send-button" onclick="clearCommandLogs('${port}')" style="background: #ef4444;">🗑️ 清空日志</button>
+            <button class="send-button" onclick="clearCommandLogs('${port}')" style="background: var(--danger);">🗑️ 清空日志</button>
           </div>
           <div style="background: #1e293b; padding: 16px; border-radius: 8px; max-height: 500px; overflow-y: auto; font-family: 'Courier New', monospace;">
             ${commandHistory.map((cmd, idx) => {
@@ -299,10 +298,10 @@ function showLogs(port, moduleIndex) {
               `;
             }).join('')}
           </div>
-          <div style="margin-top: 12px; text-align: center; color: #666; font-size: 0.9em;">
+          <div style="margin-top: 12px; text-align: center; color: var(--muted); font-size: 0.9em;">
             共 ${commandHistory.length} 条记录
           </div>
-        ` : '<p style="text-align: center; color: #666;">暂无日志记录</p>'}
+        ` : '<p style="text-align: center; color: var(--muted);">暂无日志记录</p>'}
       </div>
     </div>
   `;
@@ -311,6 +310,7 @@ function showLogs(port, moduleIndex) {
 
 // 显示收件箱
 async function showInbox(port, moduleIndex) {
+  return window.MailWorkspace.open('inbox', {port});
   // 创建模态框
   const modal = document.createElement('div');
   modal.className = 'modal';
@@ -322,7 +322,7 @@ async function showInbox(port, moduleIndex) {
         <button class="close-button" onclick="this.closest('.modal').remove()">✕</button>
       </div>
       <div class="modal-body">
-        <div style="text-align: center; padding: 20px; color: #10b981;">
+        <div style="text-align: center; padding: 20px; color: var(--primary);">
           正在加载消息...
         </div>
       </div>
@@ -341,7 +341,7 @@ async function showInbox(port, moduleIndex) {
     
     if (!result.success) {
       modal.querySelector('.modal-body').innerHTML = `
-        <p style="text-align: center; color: #ef4444;">加载失败: ${result.error}</p>
+        <p style="text-align: center; color: var(--danger);">加载失败: ${result.error}</p>
       `;
       return;
     }
@@ -360,64 +360,65 @@ async function showInbox(port, moduleIndex) {
       ${messageList.length > 0 ? `
         <!-- 存储统计 -->
         <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
-          <div style="background: #eff6ff; padding: 10px 16px; border-radius: 8px; border: 1px solid #bfdbfe; flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.4em; font-weight: 700; color: #2563eb;">${simCount}</div>
-            <div style="font-size: 0.85em; color: #1e40af;">💾 SIM卡存储</div>
+          <div style="background: var(--soft); padding: 10px 16px; border-radius: 8px; border: 1px solid #bfdbfe; flex: 1; min-width: 120px; text-align: center;">
+            <div style="font-size: 1.4em; font-weight: 700; color: var(--primary);">${simCount}</div>
+            <div style="font-size: 0.85em; color: var(--accent);">💾 SIM卡存储</div>
           </div>
-          <div style="background: #f0fdf4; padding: 10px 16px; border-radius: 8px; border: 1px solid #86efac; flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.4em; font-weight: 700; color: #16a34a;">${diskCount}</div>
-            <div style="font-size: 0.85em; color: #166534;">💿 磁盘存储</div>
+          <div style="background: var(--good-bg); padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); flex: 1; min-width: 120px; text-align: center;">
+            <div style="font-size: 1.4em; font-weight: 700; color: var(--good);">${diskCount}</div>
+            <div style="font-size: 0.85em; color: var(--good);">💿 磁盘存储</div>
           </div>
         </div>
         <!-- 操作按钮 -->
         <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-          <button class="send-button" onclick="clearInbox('${port}')" style="background: #ef4444; flex: 1; min-width: 140px;">🗑️ 清空SIM卡短信</button>
-          <button class="send-button" onclick="clearDiskMessages('${port}')" style="background: #dc2626; flex: 1; min-width: 140px;">🧹 清空磁盘短信</button>
-          ${simCount > 0 ? `<button class="send-button" onclick="transferToDisk('${port}')" style="background: #2563eb; flex: 1; min-width: 140px;">📤 转移到磁盘</button>` : ''}
+          <button class="send-button" onclick="clearInbox('${port}')" style="background: var(--danger); flex: 1; min-width: 140px;">🗑️ 清空SIM卡短信</button>
+          <button class="send-button" onclick="clearDiskMessages('${port}')" style="background: var(--danger); flex: 1; min-width: 140px;">🧹 清空磁盘短信</button>
+          ${simCount > 0 ? `<button class="send-button" onclick="transferToDisk('${port}')" style="background: var(--primary); flex: 1; min-width: 140px;">📤 转移到磁盘</button>` : ''}
         </div>
         <div class="message-list">
           ${messageList.map((msg, idx) => `
             <div class="message-item">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <strong style="color: #10b981;">📞 ${escapeHtml(msg.phone || '未知号码')}</strong>
+                  <strong style="color: var(--primary);">📞 ${escapeHtml(msg.phone || '未知号码')}</strong>
                   <span style="display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 600; ${
                     (msg.storageLocation === 'disk')
-                      ? 'background: #dcfce7; color: #166534; border: 1px solid #86efac;'
-                      : 'background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;'
+                      ? 'background: var(--good-bg); color: var(--good); border: 1px solid var(--line);'
+                      : 'background: var(--soft); color: var(--accent); border: 1px solid #93c5fd;'
                   }">
                     ${(msg.storageLocation === 'disk') ? '💿 磁盘' : '💾 SIM'}
                   </span>
                 </div>
-                <span style="color: #666; font-size: 0.9em;">${escapeHtml(msg.time || msg.timestamp)}</span>
+                <span style="color: var(--muted); font-size: 0.9em;">${escapeHtml(msg.time || msg.timestamp)}</span>
               </div>
               ${msg.content ? `
-                <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; margin-top: 8px;">
-                  <div style="color: #333; line-height: 1.6; word-break: break-word; white-space: pre-wrap;">${escapeHtml(msg.content)}</div>
-                  ${msg.isMultipart ? '<div style="margin-top: 8px; color: #10b981; font-size: 0.85em;">📨 长短信</div>' : ''}
+                <div style="background: var(--surface); padding: 12px; border-radius: 8px; border: 1px solid var(--line); margin-top: 8px;">
+                  <div style="color: var(--ink); line-height: 1.6; word-break: break-word; white-space: pre-wrap;">${escapeHtml(msg.content)}</div>
+                  ${msg.isMultipart ? '<div style="margin-top: 8px; color: var(--primary); font-size: 0.85em;">📨 长短信</div>' : ''}
                 </div>
-              ` : '<div style="color: #999; font-style: italic;">无内容</div>'}
+              ` : '<div style="color: var(--muted); font-style: italic;">无内容</div>'}
               <details style="margin-top: 8px;">
-                <summary style="cursor: pointer; color: #666; font-size: 0.9em;">查看原始PDU</summary>
+                <summary style="cursor: pointer; color: var(--muted); font-size: 0.9em;">查看原始PDU</summary>
                 <code style="display: block; margin-top: 8px; word-break: break-all; font-size: 0.85em;">${escapeHtml(msg.pdu || '')}</code>
               </details>
             </div>
           `).join('')}
         </div>
-        <div style="margin-top: 12px; text-align: center; color: #666; font-size: 0.9em;">
+        <div style="margin-top: 12px; text-align: center; color: var(--muted); font-size: 0.9em;">
           共 ${messageList.length} 条消息 (SIM: ${simCount}, 磁盘: ${diskCount})
         </div>
-      ` : '<p style="text-align: center; color: #666;">暂无短信</p>'}
+      ` : '<p style="text-align: center; color: var(--muted);">暂无短信</p>'}
     `;
   } catch (error) {
     modal.querySelector('.modal-body').innerHTML = `
-      <p style="text-align: center; color: #ef4444;">加载失败: ${error.message}</p>
+      <p style="text-align: center; color: var(--danger);">加载失败: ${error.message}</p>
     `;
   }
 }
 
 // 显示发件箱
 function showCompose(port) {
+  return window.MailWorkspace.open('outbox', {port, compose:true});
   const modal = document.createElement('div');
   modal.className = 'modal';
   modal.innerHTML = `
@@ -430,7 +431,7 @@ function showCompose(port) {
         <div class="form-group">
           <label>目标手机号:</label>
           <div style="display: flex; gap: 8px;">
-            <select id="phoneCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
+            <select id="phoneCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
               <option value="+86">+86 🇨🇳</option>
               <option value="+852">+852 🇭🇰</option>
               <option value="+853">+853 🇲🇴</option>
@@ -474,14 +475,14 @@ async function sendSMS(port) {
   const status = document.getElementById('sendStatus');
   
   if (!phoneRaw || !message) {
-    status.innerHTML = '<p style="color: #ef4444;">请填写手机号和短信内容</p>';
+    status.innerHTML = '<p style="color: var(--danger);">请填写手机号和短信内容</p>';
     return;
   }
   
   // 拼接区号和手机号
   const phone = countryCode + phoneRaw;
   
-  status.innerHTML = '<p style="color: #10b981;">发送中...</p>';
+  status.innerHTML = '<p style="color: var(--primary);">发送中...</p>';
   
   try {
     const response = await fetch('/api/send', {
@@ -495,15 +496,15 @@ async function sendSMS(port) {
     const result = await response.json();
     
     if (result.success) {
-      status.innerHTML = '<p style="color: #10b981;">✓ 发送成功！</p>';
+      status.innerHTML = '<p style="color: var(--primary);">✓ 发送成功！</p>';
       setTimeout(() => {
         document.querySelector('.modal').remove();
       }, 2000);
     } else {
-      status.innerHTML = `<p style="color: #ef4444;">✗ 发送失败: ${result.error}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 发送失败: ${result.error}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: #ef4444;">✗ 发送失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 发送失败: ${error.message}</p>`;
   }
 }
 
@@ -533,6 +534,7 @@ async function clearUnreadCount(port) {
 
 // 显示设置界面
 async function showSettings(port, moduleIndex) {
+  return window.MailWorkspace.open('forwarding', {port});
   const module = window.modulesData ? window.modulesData[moduleIndex - 1] : null;
   const settings = module?.forwardSettings || {
     httpEnabled: false,
@@ -597,7 +599,7 @@ async function showSettings(port, moduleIndex) {
       </div>
       <div class="modal-body">
         <!-- HTTP转发设置 -->
-        <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+        <div style="background: var(--soft); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <input type="checkbox" id="httpEnabled" ${settings.httpEnabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
             <label for="httpEnabled" style="font-weight: 600; font-size: 1.1em;">🌐 HTTP转发</label>
@@ -605,7 +607,7 @@ async function showSettings(port, moduleIndex) {
           
           <div class="form-group">
             <label>请求方式:</label>
-            <select id="httpMethod" style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;">
+            <select id="httpMethod" style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;">
               <option value="GET" ${settings.httpMethod === 'GET' ? 'selected' : ''}>GET</option>
               <option value="POST" ${settings.httpMethod === 'POST' ? 'selected' : ''}>POST</option>
             </select>
@@ -615,17 +617,17 @@ async function showSettings(port, moduleIndex) {
             <label>URL地址 (使用 {sms} 代替短信内容):</label>
             <input type="text" id="httpUrl" value="${escapeHtml(settings.httpUrl)}" 
               placeholder="例如: http://example.com/api?message={sms}" 
-              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+              style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;" />
           </div>
           
           <div style="margin-bottom: 12px;">
-            <button class="send-button" onclick="testHttpForward('${port}')" style="background: #3b82f6; width: 100%;">
+            <button class="send-button" onclick="testHttpForward('${port}')" style="background: var(--primary); width: 100%;">
               🧪 测试 HTTP 转发
             </button>
             <div id="httpTestResult" style="margin-top: 8px;"></div>
           </div>
           
-          <div style="background: #eff6ff; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #1e40af;">
+          <div style="background: var(--soft); padding: 10px; border-radius: 6px; font-size: 0.9em; color: var(--accent);">
             <strong>说明:</strong><br>
             • GET模式: 直接请求URL，{sms} 会被替换为短信内容<br>
             • POST模式: token 参数保留在 URL 中，其他参数转换为 POST body 发送<br>
@@ -634,7 +636,7 @@ async function showSettings(port, moduleIndex) {
         </div>
         
         <!-- SMS转发设置 -->
-        <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+        <div style="background: var(--soft); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <input type="checkbox" id="smsEnabled" ${settings.smsEnabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
             <label for="smsEnabled" style="font-weight: 600; font-size: 1.1em;">📱 SMS转发</label>
@@ -643,7 +645,7 @@ async function showSettings(port, moduleIndex) {
           <div class="form-group">
             <label>目标手机号:</label>
             <div style="display: flex; gap: 8px;">
-              <select id="smsCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
+              <select id="smsCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
                 <option value="+86" ${smsPhone.code === '+86' ? 'selected' : ''}>+86 🇨🇳</option>
                 <option value="+852" ${smsPhone.code === '+852' ? 'selected' : ''}>+852 🇭🇰</option>
                 <option value="+853" ${smsPhone.code === '+853' ? 'selected' : ''}>+853 🇲🇴</option>
@@ -666,17 +668,17 @@ async function showSettings(port, moduleIndex) {
               </select>
               <input type="text" id="smsTarget" value="${escapeHtml(smsPhone.number)}" 
                 placeholder="例如: 13800138000" 
-                style="flex: 1; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+                style="flex: 1; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;" />
             </div>
           </div>
           
-          <div style="background: #fef3c7; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #92400e;">
+          <div style="background: var(--warning-bg); padding: 10px; border-radius: 6px; font-size: 0.9em; color: var(--warning);">
             <strong>提示:</strong> 收到的短信会自动转发到指定手机号
           </div>
         </div>
         
         <!-- 存储警告设置 -->
-        <div style="background: #fef3c7; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #fde047;">
+        <div style="background: var(--warning-bg); padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid var(--line);">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <input type="checkbox" id="storageWarningEnabled" ${settings.storageWarningEnabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
             <label for="storageWarningEnabled" style="font-weight: 600; font-size: 1.1em;">⚠️ 存储容量警告</label>
@@ -687,10 +689,10 @@ async function showSettings(port, moduleIndex) {
             <input type="number" id="storageWarningThreshold" value="${settings.storageWarningThreshold || 80}" 
               min="50" max="95" step="5"
               placeholder="例如: 80" 
-              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+              style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;" />
           </div>
           
-          <div style="background: #fffbeb; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #92400e;">
+          <div style="background: var(--warning-bg); padding: 10px; border-radius: 6px; font-size: 0.9em; color: var(--warning);">
             <strong>说明:</strong><br>
             • 当存储使用率达到设定阈值时，自动发送警告通知<br>
             • 通知将通过上面配置的 HTTP 或 SMS 转发功能发送<br>
@@ -699,7 +701,7 @@ async function showSettings(port, moduleIndex) {
           </div>
           
           <div style="margin-top: 12px;">
-            <button class="send-button" onclick="testStorageWarning('${port}')" style="background: #f59e0b; width: 100%;">
+            <button class="send-button" onclick="testStorageWarning('${port}')" style="background: var(--warning); width: 100%;">
               🧪 测试存储警告通知
             </button>
             <div id="storageWarningTestResult" style="margin-top: 8px;"></div>
@@ -707,7 +709,7 @@ async function showSettings(port, moduleIndex) {
         </div>
         
         <!-- 自动清空SIM空间设置 -->
-        <div style="background: #fef2f2; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #fecaca;">
+        <div style="background: var(--danger-bg); padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid var(--line);">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <input type="checkbox" id="autoClearSimEnabled" ${autoClearSimEnabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
             <label for="autoClearSimEnabled" style="font-weight: 600; font-size: 1.1em;">🔄 自动清空SIM空间</label>
@@ -718,10 +720,10 @@ async function showSettings(port, moduleIndex) {
             <input type="number" id="autoClearSimThreshold" value="${autoClearSimThreshold}" 
               min="1" max="100" step="1"
               placeholder="例如: 95" 
-              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+              style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;" />
           </div>
           
-          <div style="background: #fff1f2; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #991b1b;">
+          <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; font-size: 0.9em; color: var(--danger);">
             <strong>说明:</strong><br>
             • 启用后，当SIM卡存储使用率达到设定阈值时，自动触发<br>
             • 系统会将SIM卡中的短信加密保存到磁盘，然后清空SIM卡<br>
@@ -731,7 +733,7 @@ async function showSettings(port, moduleIndex) {
         </div>
         
         <!-- 保号设置 -->
-        <div style="background: #f0fdf4; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid #86efac;">
+        <div style="background: var(--good-bg); padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 2px solid var(--line);">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <input type="checkbox" id="keepAliveEnabled" ${keepAliveConfig.enabled ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 8px;">
             <label for="keepAliveEnabled" style="font-weight: 600; font-size: 1.1em;">📞 保号功能</label>
@@ -740,7 +742,7 @@ async function showSettings(port, moduleIndex) {
           <div class="form-group">
             <label>目标手机号:</label>
             <div style="display: flex; gap: 8px;">
-              <select id="keepAliveCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
+              <select id="keepAliveCountryCode" style="width: 100px; padding: 10px 8px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em; flex-shrink: 0;">
                 <option value="+86" ${keepAlivePhone.code === '+86' ? 'selected' : ''}>+86 🇨🇳</option>
                 <option value="+852" ${keepAlivePhone.code === '+852' ? 'selected' : ''}>+852 🇭🇰</option>
                 <option value="+853" ${keepAlivePhone.code === '+853' ? 'selected' : ''}>+853 🇲🇴</option>
@@ -763,7 +765,7 @@ async function showSettings(port, moduleIndex) {
               </select>
               <input type="text" id="keepAlivePhone" value="${escapeHtml(keepAlivePhone.number)}" 
                 placeholder="例如: 13800138000" 
-                style="flex: 1; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+                style="flex: 1; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;" />
             </div>
           </div>
           
@@ -772,23 +774,23 @@ async function showSettings(port, moduleIndex) {
             <input type="number" id="keepAliveInterval" value="${keepAliveConfig.intervalDays}" 
               min="1" max="365"
               placeholder="例如: 30" 
-              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;" />
+              style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;" />
           </div>
           
           <div class="form-group">
             <label>短信内容:</label>
             <textarea id="keepAliveMessage" rows="3" 
               placeholder="输入保号短信内容..." 
-              style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em; resize: vertical;">${escapeHtml(keepAliveConfig.message)}</textarea>
+              style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em; resize: vertical;">${escapeHtml(keepAliveConfig.message)}</textarea>
           </div>
           
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button class="send-button" onclick="testKeepAlive('${port}')" style="background: #10b981; flex: 1;">
+            <button class="send-button" onclick="testKeepAlive('${port}')" style="background: var(--primary); flex: 1;">
               🧪 测试发送
             </button>
           </div>
           
-          <div style="background: #dbeafe; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #1e40af;">
+          <div style="background: var(--soft); padding: 10px; border-radius: 6px; font-size: 0.9em; color: var(--accent);">
             <strong>说明:</strong><br>
             • 保号功能会按设定的间隔天数自动发送短信<br>
             • 首次启用后，将在设定的间隔天数后发送第一条短信<br>
@@ -801,7 +803,7 @@ async function showSettings(port, moduleIndex) {
           <button class="send-button" onclick="saveSettings('${port}', ${moduleIndex})" style="flex: 1;">
             💾 保存设置
           </button>
-          <button class="send-button" onclick="refreshMessages('${port}')" style="flex: 1; background: #6b7280;">
+          <button class="send-button" onclick="refreshMessages('${port}')" style="flex: 1; background: var(--muted);">
             🔄 刷新短信
           </button>
         </div>
@@ -840,7 +842,7 @@ async function saveSettings(port, moduleIndex) {
     message: document.getElementById('keepAliveMessage').value
   };
   
-  status.innerHTML = '<p style="color: #10b981;">保存中...</p>';
+  status.innerHTML = '<p style="color: var(--primary);">保存中...</p>';
   
   try {
     // 保存转发设置
@@ -882,7 +884,7 @@ async function saveSettings(port, moduleIndex) {
     const result2 = await response2.json();
     
     if (result1.success && resultAutoClear.success && result2.success) {
-      status.innerHTML = '<p style="color: #10b981;">✓ 保存成功！</p>';
+      status.innerHTML = '<p style="color: var(--primary);">✓ 保存成功！</p>';
       setTimeout(() => {
         document.querySelector('.modal').remove();
       }, 1500);
@@ -891,10 +893,10 @@ async function saveSettings(port, moduleIndex) {
       if (!result1.success) errors.push(`转发设置: ${result1.error}`);
       if (!resultAutoClear.success) errors.push(`自动清空SIM设置: ${resultAutoClear.error}`);
       if (!result2.success) errors.push(`保号设置: ${result2.error}`);
-      status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${errors.join(', ')}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${errors.join(', ')}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${error.message}</p>`;
   }
 }
 
@@ -942,16 +944,16 @@ async function testStorageWarning(port) {
   const smsEnabled = document.getElementById('smsEnabled').checked;
   
   if (!storageWarningEnabled) {
-    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先启用存储容量警告功能</p>';
+    resultDiv.innerHTML = '<p style="color: var(--warning);">⚠️ 请先启用存储容量警告功能</p>';
     return;
   }
   
   if (!httpEnabled && !smsEnabled) {
-    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先启用 HTTP 转发或 SMS 转发功能</p>';
+    resultDiv.innerHTML = '<p style="color: var(--warning);">⚠️ 请先启用 HTTP 转发或 SMS 转发功能</p>';
     return;
   }
   
-  resultDiv.innerHTML = '<p style="color: #10b981;">🧪 发送测试通知中...</p>';
+  resultDiv.innerHTML = '<p style="color: var(--primary);">🧪 发送测试通知中...</p>';
   
   try {
     const portName = port.replace('/dev/', '');
@@ -967,18 +969,18 @@ async function testStorageWarning(port) {
       if (result.smsSent) details.push('SMS转发成功');
       
       resultDiv.innerHTML = `
-        <div style="background: #d1fae5; padding: 10px; border-radius: 6px; border-left: 4px solid #10b981;">
-          <p style="color: #065f46; margin: 0; font-weight: 600;">✓ 测试通知发送成功</p>
-          <p style="color: #065f46; margin: 4px 0 0 0; font-size: 0.85em;">
+        <div style="background: var(--good-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--primary);">
+          <p style="color: var(--good); margin: 0; font-weight: 600;">✓ 测试通知发送成功</p>
+          <p style="color: var(--good); margin: 4px 0 0 0; font-size: 0.85em;">
             ${details.join(' · ')}
           </p>
         </div>
       `;
     } else {
       resultDiv.innerHTML = `
-        <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
-          <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
-          <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+        <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
+          <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
+          <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
             ${result.error || '未知错误'}
           </p>
         </div>
@@ -986,9 +988,9 @@ async function testStorageWarning(port) {
     }
   } catch (error) {
     resultDiv.innerHTML = `
-      <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
-        <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
-        <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+      <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
+        <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
+        <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
           ${error.message}
         </p>
       </div>
@@ -1003,11 +1005,11 @@ async function testHttpForward(port) {
   const resultDiv = document.getElementById('httpTestResult');
   
   if (!httpUrl) {
-    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先输入 URL 地址</p>';
+    resultDiv.innerHTML = '<p style="color: var(--warning);">⚠️ 请先输入 URL 地址</p>';
     return;
   }
   
-  resultDiv.innerHTML = '<p style="color: #10b981;">🧪 测试中...</p>';
+  resultDiv.innerHTML = '<p style="color: var(--primary);">🧪 测试中...</p>';
   
   try {
     // 通过服务器端代理发送请求，避免 CORS 问题
@@ -1026,9 +1028,9 @@ async function testHttpForward(port) {
     
     if (result.success) {
       resultDiv.innerHTML = `
-        <div style="background: #d1fae5; padding: 10px; border-radius: 6px; border-left: 4px solid #10b981;">
-          <p style="color: #065f46; margin: 0; font-weight: 600;">✓ 测试成功</p>
-          <p style="color: #065f46; margin: 4px 0 0 0; font-size: 0.85em;">
+        <div style="background: var(--good-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--primary);">
+          <p style="color: var(--good); margin: 0; font-weight: 600;">✓ 测试成功</p>
+          <p style="color: var(--good); margin: 4px 0 0 0; font-size: 0.85em;">
             状态码: ${result.status} ${result.statusText}<br>
             响应时间: ${result.duration}ms<br>
             请求方式: ${result.method}<br>
@@ -1036,8 +1038,8 @@ async function testHttpForward(port) {
           </p>
           ${result.responseText ? `
             <details style="margin-top: 8px;">
-              <summary style="cursor: pointer; color: #065f46; font-size: 0.85em;">查看响应内容</summary>
-              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #065f46;">${escapeHtml(result.responseText)}</pre>
+              <summary style="cursor: pointer; color: var(--good); font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: var(--good);">${escapeHtml(result.responseText)}</pre>
             </details>
           ` : ''}
         </div>
@@ -1045,9 +1047,9 @@ async function testHttpForward(port) {
     } else {
       const errorMsg = result.error || '请求失败';
       resultDiv.innerHTML = `
-        <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
-          <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
-          <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+        <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
+          <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
+          <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
             ${result.status ? `状态码: ${result.status} ${result.statusText}<br>响应时间: ${result.duration}ms<br>` : ''}
             错误: ${errorMsg}<br>
             ${errorMsg === 'fetch failed' || errorMsg.includes('ENOTFOUND') ? '提示: 请检查 URL 是否正确，服务器是否可访问' : ''}
@@ -1055,8 +1057,8 @@ async function testHttpForward(port) {
           </p>
           ${result.responseText ? `
             <details style="margin-top: 8px;">
-              <summary style="cursor: pointer; color: #991b1b; font-size: 0.85em;">查看响应内容</summary>
-              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #991b1b;">${escapeHtml(result.responseText)}</pre>
+              <summary style="cursor: pointer; color: var(--danger); font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: var(--danger);">${escapeHtml(result.responseText)}</pre>
             </details>
           ` : ''}
         </div>
@@ -1064,9 +1066,9 @@ async function testHttpForward(port) {
     }
   } catch (error) {
     resultDiv.innerHTML = `
-      <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
-        <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
-        <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+      <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
+        <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
+        <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
           错误: ${error.message}<br>
           请检查网络连接或联系管理员
         </p>
@@ -1153,7 +1155,7 @@ function parseOperatorCode(oper, format) {
     };
     
     const operatorName = operatorMap[oper] || '未知运营商';
-    return `${operatorName} (${mcc}-${mnc})`;
+    return `${window.GatewayI18n.t(operatorName)} (${mcc}-${mnc})`;
   }
   
   // format=0 或 1 表示字母数字型，直接返回
@@ -1221,7 +1223,7 @@ function getSignalClass(rssi) {
 // 计算保号倒计时
 function getKeepAliveCountdown(keepAlive) {
   if (!keepAlive.lastSentTime) {
-    return `
+    return window.GatewayI18n.html`
       <div class="keep-alive-content">
         <div class="keep-alive-status waiting">
           <div class="keep-alive-days">配置中</div>
@@ -1238,7 +1240,7 @@ function getKeepAliveCountdown(keepAlive) {
   const remainingMs = nextSendTime - now;
   
   if (remainingMs <= 0) {
-    return `
+    return window.GatewayI18n.html`
       <div class="keep-alive-content">
         <div class="keep-alive-status sending">
           <div class="keep-alive-days">准备发送</div>
@@ -1262,13 +1264,13 @@ function getKeepAliveCountdown(keepAlive) {
   const elapsedMs = now - lastSent;
   const progressPercent = Math.max(0, Math.min(100, (elapsedMs / intervalMs) * 100));
   
-  return `
+  return window.GatewayI18n.html`
     <div class="keep-alive-content">
       <div class="keep-alive-status ${statusClass}">
         <div class="keep-alive-days">
           <span class="days-number">${remainingDays}</span>
           <span class="days-unit">天</span>
-          ${remainingHours > 0 ? `<span class="hours-number">${remainingHours}</span><span class="hours-unit">小时</span>` : ''}
+          ${remainingHours > 0 ? window.GatewayI18n.html`<span class="hours-number">${remainingHours}</span><span class="hours-unit">小时</span>` : ''}
         </div>
         <div class="keep-alive-hint">距离下次发送</div>
       </div>
@@ -1282,7 +1284,7 @@ function getKeepAliveCountdown(keepAlive) {
         </div>
         <div class="keep-alive-info-item">
           <span class="info-label">下次发送:</span>
-          <span class="info-value">${new Date(nextSendTime).toLocaleDateString('zh-CN')}</span>
+          <span class="info-value">${new Date(nextSendTime).toLocaleDateString(window.GatewayI18n.locale())}</span>
         </div>
       </div>
     </div>
@@ -1291,12 +1293,13 @@ function getKeepAliveCountdown(keepAlive) {
 
 function updateLastUpdateTime() {
   const now = new Date();
-  const timeString = now.toLocaleTimeString('zh-CN');
-  document.getElementById('lastUpdate').textContent = `最后更新: ${timeString}`;
+  const timeString = now.toLocaleTimeString(window.GatewayI18n.locale());
+  document.getElementById('lastUpdate').textContent = window.GatewayI18n.html`最后更新: ${timeString}`;
 }
 
 // 显示系统设置
 async function showSystemSettings() {
+  return window.MailWorkspace.open('settings', {});
   const modal = document.createElement('div');
   modal.className = 'modal';
   
@@ -1328,7 +1331,7 @@ async function showSystemSettings() {
         
         <!-- 登录凭据设置 -->
         <div id="credentials-tab" class="settings-tab-content active">
-          <h3 style="margin-bottom: 16px; color: #374151;">修改登录凭据</h3>
+          <h3 style="margin-bottom: 16px; color: var(--ink);">修改登录凭据</h3>
           
           <div class="form-group">
             <label>新用户名:</label>
@@ -1351,7 +1354,7 @@ async function showSystemSettings() {
         
         <!-- 登录通知设置 -->
         <div id="notification-tab" class="settings-tab-content">
-          <h3 style="margin-bottom: 16px; color: #374151;">登录失败通知</h3>
+          <h3 style="margin-bottom: 16px; color: var(--ink);">登录失败通知</h3>
           
           <div class="form-group">
             <label style="display: flex; align-items: center; gap: 8px;">
@@ -1362,7 +1365,7 @@ async function showSystemSettings() {
           
           <div class="form-group">
             <label>请求方式:</label>
-            <select id="notificationMethod" style="width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95em;">
+            <select id="notificationMethod" style="width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 0.95em;">
               <option value="GET" ${notificationConfig.method === 'GET' ? 'selected' : ''}>GET</option>
               <option value="POST" ${notificationConfig.method === 'POST' ? 'selected' : ''}>POST</option>
             </select>
@@ -1374,7 +1377,7 @@ async function showSystemSettings() {
               placeholder="例如: http://example.com/api?message={login}" />
           </div>
           
-          <div style="background: #eff6ff; padding: 12px; border-radius: 6px; font-size: 0.9em; color: #1e40af; margin-bottom: 16px;">
+          <div style="background: var(--soft); padding: 12px; border-radius: 6px; font-size: 0.9em; color: var(--accent); margin-bottom: 16px;">
             <strong>说明:</strong><br>
             • {login} 会被替换为: "登录失败 - IP: xxx, 用户名: xxx, 错误: xxx, 时间: xxx"<br>
             • GET模式: 直接请求URL<br>
@@ -1382,7 +1385,7 @@ async function showSystemSettings() {
           </div>
           
           <div style="margin-bottom: 12px;">
-            <button class="send-button" onclick="testLoginNotification()" style="background: #3b82f6; width: 100%;">
+            <button class="send-button" onclick="testLoginNotification()" style="background: var(--primary); width: 100%;">
               🧪 测试登录通知
             </button>
             <div id="notificationTestResult" style="margin-top: 8px;"></div>
@@ -1394,10 +1397,10 @@ async function showSystemSettings() {
         
         <!-- 登录日志 -->
         <div id="logs-tab" class="settings-tab-content">
-          <h3 style="margin-bottom: 16px; color: #374151;">登录日志</h3>
+          <h3 style="margin-bottom: 16px; color: var(--ink);">登录日志</h3>
           <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-            <button class="send-button" onclick="loadLoginLogs()" style="flex: 1; background: #6b7280;">🔄 刷新日志</button>
-            <button class="send-button" onclick="clearLoginLogs()" style="flex: 1; background: #ef4444;">🗑️ 清空日志</button>
+            <button class="send-button" onclick="loadLoginLogs()" style="flex: 1; background: var(--muted);">🔄 刷新日志</button>
+            <button class="send-button" onclick="clearLoginLogs()" style="flex: 1; background: var(--danger);">🗑️ 清空日志</button>
           </div>
           <div id="loginLogs" style="background: #1e293b; padding: 16px; border-radius: 8px; max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; color: #e2e8f0; font-size: 0.85em;">
             点击"刷新日志"加载...
@@ -1418,16 +1421,16 @@ async function updateCredentials() {
   const status = document.getElementById('settingsStatus');
   
   if (!newUsername && !newPassword) {
-    status.innerHTML = '<p style="color: #f59e0b;">请至少填写一项需要修改的内容</p>';
+    status.innerHTML = '<p style="color: var(--warning);">请至少填写一项需要修改的内容</p>';
     return;
   }
   
   if (newPassword && newPassword !== confirmPassword) {
-    status.innerHTML = '<p style="color: #ef4444;">两次输入的密码不一致</p>';
+    status.innerHTML = '<p style="color: var(--danger);">两次输入的密码不一致</p>';
     return;
   }
   
-  status.innerHTML = '<p style="color: #10b981;">保存中...</p>';
+  status.innerHTML = '<p style="color: var(--primary);">保存中...</p>';
   
   try {
     const response = await fetch('/api/update-credentials', {
@@ -1444,16 +1447,16 @@ async function updateCredentials() {
     const result = await response.json();
     
     if (result.success) {
-      status.innerHTML = '<p style="color: #10b981;">✓ 保存成功！请使用新凭据重新登录</p>';
+      status.innerHTML = '<p style="color: var(--primary);">✓ 保存成功！请使用新凭据重新登录</p>';
       setTimeout(() => {
         document.querySelector('.modal').remove();
         handleLogout();
       }, 2000);
     } else {
-      status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${result.error}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${result.error}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${error.message}</p>`;
   }
 }
 
@@ -1484,7 +1487,7 @@ async function updateNotificationConfig() {
   const method = document.getElementById('notificationMethod').value;
   const status = document.getElementById('notificationStatus');
   
-  status.innerHTML = '<p style="color: #10b981;">保存中...</p>';
+  status.innerHTML = '<p style="color: var(--primary);">保存中...</p>';
   
   try {
     const response = await fetch('/api/notification-config', {
@@ -1498,15 +1501,15 @@ async function updateNotificationConfig() {
     const result = await response.json();
     
     if (result.success) {
-      status.innerHTML = '<p style="color: #10b981;">✓ 保存成功！</p>';
+      status.innerHTML = '<p style="color: var(--primary);">✓ 保存成功！</p>';
       setTimeout(() => {
         status.innerHTML = '';
       }, 3000);
     } else {
-      status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${result.error}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${result.error}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: #ef4444;">✗ 保存失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${error.message}</p>`;
   }
 }
 
@@ -1517,11 +1520,11 @@ async function testLoginNotification() {
   const resultDiv = document.getElementById('notificationTestResult');
   
   if (!url) {
-    resultDiv.innerHTML = '<p style="color: #f59e0b;">⚠️ 请先输入通知 URL</p>';
+    resultDiv.innerHTML = '<p style="color: var(--warning);">⚠️ 请先输入通知 URL</p>';
     return;
   }
   
-  resultDiv.innerHTML = '<p style="color: #10b981;">🧪 测试中...</p>';
+  resultDiv.innerHTML = '<p style="color: var(--primary);">🧪 测试中...</p>';
   
   try {
     // 通过服务器端代理发送请求
@@ -1540,9 +1543,9 @@ async function testLoginNotification() {
     
     if (result.success) {
       resultDiv.innerHTML = `
-        <div style="background: #d1fae5; padding: 10px; border-radius: 6px; border-left: 4px solid #10b981;">
-          <p style="color: #065f46; margin: 0; font-weight: 600;">✓ 测试成功</p>
-          <p style="color: #065f46; margin: 4px 0 0 0; font-size: 0.85em;">
+        <div style="background: var(--good-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--primary);">
+          <p style="color: var(--good); margin: 0; font-weight: 600;">✓ 测试成功</p>
+          <p style="color: var(--good); margin: 4px 0 0 0; font-size: 0.85em;">
             状态码: ${result.status} ${result.statusText}<br>
             响应时间: ${result.duration}ms<br>
             请求方式: ${result.method}<br>
@@ -1550,8 +1553,8 @@ async function testLoginNotification() {
           </p>
           ${result.responseText ? `
             <details style="margin-top: 8px;">
-              <summary style="cursor: pointer; color: #065f46; font-size: 0.85em;">查看响应内容</summary>
-              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #065f46;">${escapeHtml(result.responseText)}</pre>
+              <summary style="cursor: pointer; color: var(--good); font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: var(--good);">${escapeHtml(result.responseText)}</pre>
             </details>
           ` : ''}
         </div>
@@ -1559,9 +1562,9 @@ async function testLoginNotification() {
     } else {
       const errorMsg = result.error || '请求失败';
       resultDiv.innerHTML = `
-        <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
-          <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
-          <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+        <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
+          <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
+          <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
             ${result.status ? `状态码: ${result.status} ${result.statusText}<br>响应时间: ${result.duration}ms<br>` : ''}
             错误: ${errorMsg}<br>
             ${errorMsg === 'fetch failed' || errorMsg.includes('ENOTFOUND') ? '提示: 请检查 URL 是否正确，服务器是否可访问' : ''}
@@ -1569,8 +1572,8 @@ async function testLoginNotification() {
           </p>
           ${result.responseText ? `
             <details style="margin-top: 8px;">
-              <summary style="cursor: pointer; color: #991b1b; font-size: 0.85em;">查看响应内容</summary>
-              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: #991b1b;">${escapeHtml(result.responseText)}</pre>
+              <summary style="cursor: pointer; color: var(--danger); font-size: 0.85em;">查看响应内容</summary>
+              <pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.75em; overflow-x: auto; color: var(--danger);">${escapeHtml(result.responseText)}</pre>
             </details>
           ` : ''}
         </div>
@@ -1578,9 +1581,9 @@ async function testLoginNotification() {
     }
   } catch (error) {
     resultDiv.innerHTML = `
-      <div style="background: #fee2e2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
-        <p style="color: #991b1b; margin: 0; font-weight: 600;">✗ 测试失败</p>
-        <p style="color: #991b1b; margin: 4px 0 0 0; font-size: 0.85em;">
+      <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
+        <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
+        <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
           错误: ${error.message}<br>
           请检查网络连接或联系管理员
         </p>
@@ -1592,7 +1595,7 @@ async function testLoginNotification() {
 // 加载登录日志
 async function loadLoginLogs() {
   const logsDiv = document.getElementById('loginLogs');
-  logsDiv.innerHTML = '<p style="color: #10b981;">加载中...</p>';
+  logsDiv.innerHTML = '<p style="color: var(--primary);">加载中...</p>';
   
   try {
     const response = await fetch('/api/login-logs');
@@ -1601,7 +1604,7 @@ async function loadLoginLogs() {
     if (result.success && result.logs.length > 0) {
       logsDiv.innerHTML = result.logs.map(log => {
         const isSuccess = log.includes('SUCCESS');
-        const color = isSuccess ? '#10b981' : '#ef4444';
+        const color = isSuccess ? 'var(--primary)' : 'var(--danger)';
         const icon = isSuccess ? '✓' : '✗';
         return `<div style="margin-bottom: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; border-left: 3px solid ${color};">
           <span style="color: ${color}; margin-right: 8px;">${icon}</span>${escapeHtml(log)}
@@ -1611,7 +1614,7 @@ async function loadLoginLogs() {
       logsDiv.innerHTML = '<p style="color: #94a3b8;">暂无登录日志</p>';
     }
   } catch (error) {
-    logsDiv.innerHTML = `<p style="color: #ef4444;">加载失败: ${error.message}</p>`;
+    logsDiv.innerHTML = `<p style="color: var(--danger);">加载失败: ${error.message}</p>`;
   }
 }
 
@@ -1622,7 +1625,7 @@ async function clearLoginLogs() {
   }
   
   const logsDiv = document.getElementById('loginLogs');
-  logsDiv.innerHTML = '<p style="color: #10b981;">清空中...</p>';
+  logsDiv.innerHTML = '<p style="color: var(--primary);">清空中...</p>';
   
   try {
     const response = await fetch('/api/clear-login-logs', {
@@ -1631,15 +1634,15 @@ async function clearLoginLogs() {
     const result = await response.json();
     
     if (result.success) {
-      logsDiv.innerHTML = '<p style="color: #10b981;">✓ 日志已清空</p>';
+      logsDiv.innerHTML = '<p style="color: var(--primary);">✓ 日志已清空</p>';
       setTimeout(() => {
         loadLoginLogs();
       }, 1000);
     } else {
-      logsDiv.innerHTML = `<p style="color: #ef4444;">✗ 清空失败: ${result.error}</p>`;
+      logsDiv.innerHTML = `<p style="color: var(--danger);">✗ 清空失败: ${result.error}</p>`;
     }
   } catch (error) {
-    logsDiv.innerHTML = `<p style="color: #ef4444;">✗ 清空失败: ${error.message}</p>`;
+    logsDiv.innerHTML = `<p style="color: var(--danger);">✗ 清空失败: ${error.message}</p>`;
   }
 }
 

@@ -1,10 +1,13 @@
 {
   "name": "lte-gateway",
-  "version": "1.0.0",
+  "version": "3.1.0",
   "description": "lte聚合网关",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:ui": "node tests/workspace-ui.mjs",
+    "test:workspace": "node tests/workspace.cjs",
+    "package:update": "node scripts/package-update.cjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -12,5 +15,8 @@
     "express-session": "^1.17.3",
     "serialport": "^12.0.0",
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

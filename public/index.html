@@ -3,36 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LTE聚合网关管理面板</title>
+  <title>LTE & SMS Gateway · 网关工作台</title>
+  <script src="theme.js"></script>
+  <script src="i18n.js?v=3.1"></script>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="studio.css?v=3.1-sidebar">
+  <link rel="stylesheet" href="mail-workspace.css?v=3.1-sidebar">
 </head>
 <body>
-  <div class="container">
-    <h1>LTE聚合网关管理面板</h1>
-    <p style="text-align: center;">
-    LTE&SMS-Gateway Version v2.1.0
-    </p>
-    
-    <!-- From Uiverse.io by TreepDeep --> 
-    <div class="refresh-info">自动刷新中... <span id="lastUpdate"></span>
-    <p>请严格遵守当地法律法规，严禁用于违法违规用途</p></div>
-    <div class="footer-actions">
-      <button class="footer-button" onclick="showSystemSettings()">
-        <span class="button-icon"></span>
-        <span class="button-text">系统设置</span>
-      </button>
-      <button class="footer-button logout-button" onclick="handleLogout()">
-        <span class="button-icon"></span>
-        <span class="button-text">退出登录</span>
-      </button>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="网关首页"><span class="brand-icon">◈</span><span>LTE <b>Gateway</b><small>通信工作台</small></span></a>
+      <div class="nav-label">工作空间</div>
+      <nav aria-label="工作台导航">
+        <div class="nav-group-title">设备与 SIM</div>
+        <button class="nav-button active" data-view="all"><span aria-hidden="true">▦</span>网关概览</button>
+        <button class="nav-button" data-view="device"><span aria-hidden="true">◈</span>设备信息</button>
+        <button class="nav-button" data-view="sim-overview"><span aria-hidden="true">▤</span>SIM 卡概览</button>
+        <button class="nav-button" data-view="sim-details"><span aria-hidden="true">▧</span>SIM 卡详情</button>
+        <div class="nav-group-title">短信与通信</div>
+        <button class="nav-button" data-view="unread"><span aria-hidden="true">✉</span>未读短信 <i id="navUnread">—</i></button>
+        <button class="nav-button" data-view="inbox"><span aria-hidden="true">▣</span>收件箱</button>
+        <button class="nav-button" data-view="outbox"><span aria-hidden="true">↗</span>发件箱</button>
+        <button class="nav-button" data-view="favorites"><span aria-hidden="true">☆</span>收藏夹</button>
+        <button class="nav-button" data-view="forwarding"><span aria-hidden="true">⇄</span>转发</button>
+        <button class="nav-button" data-view="logs"><span aria-hidden="true">⌁</span>通讯日志</button>
+        <div class="nav-group-title">数据与维护</div>
+        <button class="nav-button" data-view="backup"><span aria-hidden="true">⇅</span>备份与恢复</button>
+        <button class="nav-button" data-view="cache"><span aria-hidden="true">♧</span>缓存清理</button>
+        <button class="nav-button" data-view="upgrade"><span aria-hidden="true">↑</span>应用升级</button>
+        <button class="nav-button" data-view="settings"><span aria-hidden="true">⚙</span>系统设置</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="connection-dot"></span><span id="sidebarConnection">正在连接</span></div>
+        <small>LTE&SMS-Gateway · v3.1.0</small>
+        <button onclick="handleLogout()">↪ <span>退出登录</span></button>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><div class="breadcrumb">通信工作台 <span>›</span> <strong id="breadcrumbTitle">网关概览</strong></div><label class="theme-control language-control"><select id="languageSelect" aria-label="Language / 语言"><option value="zh">中文</option><option value="en">English</option></select></label><label class="theme-control">主题 <select id="themeSelect" aria-label="界面主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></header>
+      <main class="container">
+        <div class="page-heading"><div><p class="eyebrow">COMMUNICATION WORKSPACE</p><h1 id="pageTitle">网关概览</h1><p class="page-description">查看每一路连接，管理每一条消息。</p></div><div class="refresh-info"><span class="connection-dot"></span><span id="connectionText" role="status">正在连接网关…</span><small id="lastUpdate">等待首次更新</small></div></div>
+        <div id="overviewPage">
+        <section class="gateway-hero" aria-label="网关状态">
+          <div><div class="hero-tags"><span>LTE & SMS</span><span>实时监测</span></div><h2>多路连接，统一管理</h2><p>从网络状态到短信收发，让通信一目了然。</p><div class="hero-footer">串口模块 <span> / </span> 短信转发 <span> / </span> SIM 保号</div></div>
+          <div class="gateway-art" aria-hidden="true"><div class="radio-orbit orbit-one"></div><div class="radio-orbit orbit-two"></div><div class="radio-chip">⌁<small>LTE GATEWAY</small></div></div>
+        </section>
+        <section class="overview-stats" aria-label="实时统计">
+          <div class="overview-stat"><span>接入模块 <i aria-hidden="true">▦</i></span><strong id="totalModules">—</strong><small>网关上报的模块总数</small></div>
+          <div class="overview-stat"><span>正常模块 <i aria-hidden="true">⌁</i></span><strong id="onlineModules">—</strong><small>模块与 SIM 状态正常</small></div>
+          <div class="overview-stat"><span>未读短信 <i aria-hidden="true">✉</i></span><strong id="unreadMessages">—</strong><small>等待查看的新消息</small></div>
+          <div class="overview-stat"><span>存储短信 <i aria-hidden="true">▤</i></span><strong id="storedMessages">—</strong><small>SIM 与磁盘短信合计</small></div>
+        </section>
+        <section class="module-section" aria-label="模块列表">
+          <div class="section-toolbar"><h2>通信模块 <span id="visibleModules"></span></h2><label class="module-search"><span aria-hidden="true">⌕</span><input id="moduleSearch" type="search" placeholder="搜索串口或运营商" aria-label="搜索模块"></label></div>
+          <div class="modules-grid" id="modulesGrid"></div>
+          <div class="empty-state" id="emptyState" role="status"><span aria-hidden="true">⌁</span><h3>正在等待网关数据</h3><p>连接成功后，设备状态将在此自动更新。</p></div>
+        </section>
+        </div>
+        <div id="workspaceNotice" class="notice" role="status" hidden></div>
+        <div id="featurePage" hidden></div>
+        <footer class="workspace-footer">LTE & SMS Gateway <span>请严格遵守当地法律法规，严禁用于违法违规用途</span></footer>
+      </main>
     </div>
-    <div class="modules-grid" id="modulesGrid">
-      <!-- 模块卡片将通过JavaScript动态生成 -->
-    </div>
-    
-    <!-- 底部设置按钮 -->
-    
   </div>
-  <script src="app.js"></script>
+  <script src="workspace.js"></script>
+  <script src="mail-workspace.js?v=3.1"></script>
+  <script src="app.js?v=3.1"></script>
 </body>
 </html>

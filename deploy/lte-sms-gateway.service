@@ -1,0 +1,18 @@
+[Unit]
+Description=LTE SMS Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=lte-sms-gateway
+Group=lte-sms-gateway
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/lte-sms-gateway
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node server.js
+Restart=always
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
