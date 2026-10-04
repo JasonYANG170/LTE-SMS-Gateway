@@ -31,7 +31,10 @@ const CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
 const LOGIN_LOG_FILE = path.join(__dirname, 'login.log');
 const NOTIFICATION_CONFIG_FILE = path.join(__dirname, 'notification.json');
 const MODULE_SETTINGS_FILE = path.join(__dirname, 'module-settings.json');
-const ENCRYPTION_KEY = crypto.scryptSync('lte-gateway-encryption-key', 'salt', 32);
+if (!process.env.ENCRYPTION_KEY) {
+  throw new Error('环境变量 ENCRYPTION_KEY 未设置，请配置后再启动服务（用于加密敏感数据）');
+}
+const ENCRYPTION_KEY = crypto.scryptSync(process.env.ENCRYPTION_KEY, process.env.ENCRYPTION_SALT || 'lte-gateway-salt', 32);
 const IV_LENGTH = 16;
 
 // ========== 磁盘存储短信管理 ==========
