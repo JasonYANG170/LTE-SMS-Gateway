@@ -341,7 +341,7 @@ async function showInbox(port, moduleIndex) {
     
     if (!result.success) {
       modal.querySelector('.modal-body').innerHTML = `
-        <p style="text-align: center; color: var(--danger);">加载失败: ${result.error}</p>
+        <p style="text-align: center; color: var(--danger);">加载失败: ${escapeHtml(result.error)}</p>
       `;
       return;
     }
@@ -411,7 +411,7 @@ async function showInbox(port, moduleIndex) {
     `;
   } catch (error) {
     modal.querySelector('.modal-body').innerHTML = `
-      <p style="text-align: center; color: var(--danger);">加载失败: ${error.message}</p>
+      <p style="text-align: center; color: var(--danger);">加载失败: ${escapeHtml(error.message)}</p>
     `;
   }
 }
@@ -501,10 +501,10 @@ async function sendSMS(port) {
         document.querySelector('.modal').remove();
       }, 2000);
     } else {
-      status.innerHTML = `<p style="color: var(--danger);">✗ 发送失败: ${result.error}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 发送失败: ${escapeHtml(result.error)}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: var(--danger);">✗ 发送失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 发送失败: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -893,10 +893,10 @@ async function saveSettings(port, moduleIndex) {
       if (!result1.success) errors.push(`转发设置: ${result1.error}`);
       if (!resultAutoClear.success) errors.push(`自动清空SIM设置: ${resultAutoClear.error}`);
       if (!result2.success) errors.push(`保号设置: ${result2.error}`);
-      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${errors.join(', ')}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${escapeHtml(errors.join(', '))}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -928,10 +928,10 @@ async function testKeepAlive(port) {
     if (result.success) {
       alert('✓ 测试短信发送成功！');
     } else {
-      alert(`✗ 测试短信发送失败: ${result.error}`);
+      alert(`✗ 测试短信发送失败: ${escapeHtml(result.error)}`);
     }
   } catch (error) {
-    alert(`✗ 测试短信发送失败: ${error.message}`);
+    alert(`✗ 测试短信发送失败: ${escapeHtml(error.message)}`);
   }
 }
 
@@ -991,7 +991,7 @@ async function testStorageWarning(port) {
       <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
         <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
         <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
-          ${error.message}
+          ${escapeHtml(error.message)}
         </p>
       </div>
     `;
@@ -1031,10 +1031,10 @@ async function testHttpForward(port) {
         <div style="background: var(--good-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--primary);">
           <p style="color: var(--good); margin: 0; font-weight: 600;">✓ 测试成功</p>
           <p style="color: var(--good); margin: 4px 0 0 0; font-size: 0.85em;">
-            状态码: ${result.status} ${result.statusText}<br>
+            状态码: ${result.status} ${escapeHtml(result.statusText)}<br>
             响应时间: ${result.duration}ms<br>
-            请求方式: ${result.method}<br>
-            测试消息: ${result.testMessage}
+            请求方式: ${escapeHtml(result.method)}<br>
+            测试消息: ${escapeHtml(result.testMessage)}
           </p>
           ${result.responseText ? `
             <details style="margin-top: 8px;">
@@ -1050,8 +1050,8 @@ async function testHttpForward(port) {
         <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
           <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
           <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
-            ${result.status ? `状态码: ${result.status} ${result.statusText}<br>响应时间: ${result.duration}ms<br>` : ''}
-            错误: ${errorMsg}<br>
+            ${result.status ? `状态码: ${result.status} ${escapeHtml(result.statusText)}<br>响应时间: ${result.duration}ms<br>` : ''}
+            错误: ${escapeHtml(errorMsg)}<br>
             ${errorMsg === 'fetch failed' || errorMsg.includes('ENOTFOUND') ? '提示: 请检查 URL 是否正确，服务器是否可访问' : ''}
             ${errorMsg.includes('ECONNREFUSED') ? '提示: 服务器拒绝连接，请检查服务是否运行' : ''}
           </p>
@@ -1069,7 +1069,7 @@ async function testHttpForward(port) {
       <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
         <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
         <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
-          错误: ${error.message}<br>
+          错误: ${escapeHtml(error.message)}<br>
           请检查网络连接或联系管理员
         </p>
       </div>
@@ -1078,9 +1078,7 @@ async function testHttpForward(port) {
 }
 
 function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  return String(text ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 // 从带区号的手机号中拆分区号和号码
@@ -1329,11 +1327,14 @@ async function showSystemSettings() {
           <button class="settings-tab" onclick="switchSettingsTab(event, 'logs')">登录日志</button>
         </div>
         
+        <div style="margin:12px 0"><button class="send-button" onclick="openGatewaySecurity()">双重验证 (TOTP) 安全设置</button></div>
         <!-- 登录凭据设置 -->
         <div id="credentials-tab" class="settings-tab-content active">
           <h3 style="margin-bottom: 16px; color: var(--ink);">修改登录凭据</h3>
           
           <div class="form-group">
+            <label>当前密码（修改凭据时必填）:</label><input type="password" id="currentPassword" autocomplete="current-password" />
+            <label>TOTP 验证码或恢复码（已启用时必填）:</label><input type="text" id="credentialCode" autocomplete="one-time-code" />
             <label>新用户名:</label>
             <input type="text" id="newUsername" placeholder="输入新用户名" />
           </div>
@@ -1440,7 +1441,9 @@ async function updateCredentials() {
       },
       body: JSON.stringify({ 
         username: newUsername || undefined,
-        password: newPassword || undefined
+        password: newPassword || undefined,
+        currentPassword: document.getElementById('currentPassword').value,
+        code: document.getElementById('credentialCode').value.trim()
       })
     });
     
@@ -1453,10 +1456,10 @@ async function updateCredentials() {
         handleLogout();
       }, 2000);
     } else {
-      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${result.error}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${escapeHtml(result.error)}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -1506,10 +1509,10 @@ async function updateNotificationConfig() {
         status.innerHTML = '';
       }, 3000);
     } else {
-      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${result.error}</p>`;
+      status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${escapeHtml(result.error)}</p>`;
     }
   } catch (error) {
-    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${error.message}</p>`;
+    status.innerHTML = `<p style="color: var(--danger);">✗ 保存失败: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -1546,10 +1549,10 @@ async function testLoginNotification() {
         <div style="background: var(--good-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--primary);">
           <p style="color: var(--good); margin: 0; font-weight: 600;">✓ 测试成功</p>
           <p style="color: var(--good); margin: 4px 0 0 0; font-size: 0.85em;">
-            状态码: ${result.status} ${result.statusText}<br>
+            状态码: ${result.status} ${escapeHtml(result.statusText)}<br>
             响应时间: ${result.duration}ms<br>
-            请求方式: ${result.method}<br>
-            测试消息: ${result.testMessage}
+            请求方式: ${escapeHtml(result.method)}<br>
+            测试消息: ${escapeHtml(result.testMessage)}
           </p>
           ${result.responseText ? `
             <details style="margin-top: 8px;">
@@ -1565,8 +1568,8 @@ async function testLoginNotification() {
         <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
           <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
           <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
-            ${result.status ? `状态码: ${result.status} ${result.statusText}<br>响应时间: ${result.duration}ms<br>` : ''}
-            错误: ${errorMsg}<br>
+            ${result.status ? `状态码: ${result.status} ${escapeHtml(result.statusText)}<br>响应时间: ${result.duration}ms<br>` : ''}
+            错误: ${escapeHtml(errorMsg)}<br>
             ${errorMsg === 'fetch failed' || errorMsg.includes('ENOTFOUND') ? '提示: 请检查 URL 是否正确，服务器是否可访问' : ''}
             ${errorMsg.includes('ECONNREFUSED') ? '提示: 服务器拒绝连接，请检查服务是否运行' : ''}
           </p>
@@ -1584,7 +1587,7 @@ async function testLoginNotification() {
       <div style="background: var(--danger-bg); padding: 10px; border-radius: 6px; border-left: 4px solid var(--danger);">
         <p style="color: var(--danger); margin: 0; font-weight: 600;">✗ 测试失败</p>
         <p style="color: var(--danger); margin: 4px 0 0 0; font-size: 0.85em;">
-          错误: ${error.message}<br>
+          错误: ${escapeHtml(error.message)}<br>
           请检查网络连接或联系管理员
         </p>
       </div>
@@ -1614,7 +1617,7 @@ async function loadLoginLogs() {
       logsDiv.innerHTML = '<p style="color: #94a3b8;">暂无登录日志</p>';
     }
   } catch (error) {
-    logsDiv.innerHTML = `<p style="color: var(--danger);">加载失败: ${error.message}</p>`;
+    logsDiv.innerHTML = `<p style="color: var(--danger);">加载失败: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -1639,10 +1642,10 @@ async function clearLoginLogs() {
         loadLoginLogs();
       }, 1000);
     } else {
-      logsDiv.innerHTML = `<p style="color: var(--danger);">✗ 清空失败: ${result.error}</p>`;
+      logsDiv.innerHTML = `<p style="color: var(--danger);">✗ 清空失败: ${escapeHtml(result.error)}</p>`;
     }
   } catch (error) {
-    logsDiv.innerHTML = `<p style="color: var(--danger);">✗ 清空失败: ${error.message}</p>`;
+    logsDiv.innerHTML = `<p style="color: var(--danger);">✗ 清空失败: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -1664,10 +1667,10 @@ async function clearInbox(port) {
       document.querySelector('.modal').remove();
       alert('✓ SIM卡短信已清空\n磁盘存储的短信不受影响');
     } else {
-      alert(`✗ 清空失败: ${result.error}`);
+      alert(`✗ 清空失败: ${escapeHtml(result.error)}`);
     }
   } catch (error) {
-    alert(`✗ 清空失败: ${error.message}`);
+    alert(`✗ 清空失败: ${escapeHtml(error.message)}`);
   }
 }
 
@@ -1688,10 +1691,10 @@ async function clearDiskMessages(port) {
       document.querySelector('.modal').remove();
       alert('✓ 磁盘短信已清空\nSIM卡中的短信不受影响');
     } else {
-      alert(`✗ 清空失败: ${result.error}`);
+      alert(`✗ 清空失败: ${escapeHtml(result.error)}`);
     }
   } catch (error) {
-    alert(`✗ 清空失败: ${error.message}`);
+    alert(`✗ 清空失败: ${escapeHtml(error.message)}`);
   }
 }
 
@@ -1712,10 +1715,10 @@ async function transferToDisk(port) {
       document.querySelector('.modal').remove();
       alert(`✓ 转移成功！\n已将 ${result.transferred} 条短信从SIM卡转移到磁盘\n磁盘共 ${result.diskTotal} 条短信`);
     } else {
-      alert(`✗ 转移失败: ${result.error}`);
+      alert(`✗ 转移失败: ${escapeHtml(result.error)}`);
     }
   } catch (error) {
-    alert(`✗ 转移失败: ${error.message}`);
+    alert(`✗ 转移失败: ${escapeHtml(error.message)}`);
   }
 }
 
@@ -1737,10 +1740,10 @@ async function clearCommandLogs(port) {
       document.querySelector('.modal').remove();
       alert('✓ 命令日志已清空');
     } else {
-      alert(`✗ 清空失败: ${result.error}`);
+      alert(`✗ 清空失败: ${escapeHtml(result.error)}`);
     }
   } catch (error) {
-    alert(`✗ 清空失败: ${error.message}`);
+    alert(`✗ 清空失败: ${escapeHtml(error.message)}`);
   }
 }
 
@@ -1774,10 +1777,10 @@ async function reconnectModule(port) {
     if (result.success) {
       alert(`✓ ${port} 正在重新连接...\n\n请稍等片刻，模块将自动重新初始化。`);
     } else {
-      alert(`✗ 重连失败: ${result.error}`);
+      alert(`✗ 重连失败: ${escapeHtml(result.error)}`);
     }
   } catch (error) {
-    alert(`✗ 重连失败: ${error.message}`);
+    alert(`✗ 重连失败: ${escapeHtml(error.message)}`);
   }
 }
 

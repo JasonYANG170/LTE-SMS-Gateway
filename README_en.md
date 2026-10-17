@@ -1,3 +1,5 @@
+> Version 3.2 security update: deploy the current `main` source and run `npm run setup` for a new installation. There is no default password. Existing installations must back up their data and migrate encryption before starting this version. Settings now include TOTP, recovery codes, failed-login IP history, configurable lockout, HTTPS/certificate management, and verified official GitHub updates. See [security deployment notes](docs/security.md).
+
 [简体中文](README.md) | [English](README_en.md)
 
 <div align="center">
@@ -46,12 +48,13 @@ Use a Linux host with USB serial access, [Node.js 22 or 24 LTS](https://nodejs.o
 ```bash
 git clone https://github.com/JasonYANG170/LTE-SMS-Gateway.git
 cd LTE-SMS-Gateway
-git checkout v3.1.0
-npm install --omit=dev
+git checkout main
+npm ci --omit=dev
+npm run setup
 npm start
 ```
 
-Open `http://<host>:5823/login.html`. The initial credentials are `root / password`; change them in Settings after signing in. Override the port with `PORT=8080 npm start` or a local, untracked `gateway-config.json`:
+Open `http://<host>:5823/login.html`. Run `npm run setup` first to create an account and a password of at least 12 characters. No default credentials are provided. Override the port with `PORT=8080 npm start` or a local, untracked `gateway-config.json`:
 
 ```json
 {"port":5823}
@@ -89,14 +92,14 @@ The helper relies on `Restart=always` in the systemd unit. BaoTa, PM2 and other 
 For Debian/Ubuntu running systemd, on x86_64 or aarch64/arm64. Requires curl and sudo/root. The installer installs system dependencies, downloads Node.js 24.21.0 from the official site, verifies SHA-256, deploys the selected release and configures serial access and startup.
 
 ```bash
-curl -fL https://github.com/JasonYANG170/LTE-SMS-Gateway/releases/download/v3.1.0/install.sh -o install.sh
+curl -fL https://raw.githubusercontent.com/JasonYANG170/LTE-SMS-Gateway/main/scripts/install.sh -o install.sh
 sudo bash install.sh
 ```
 
 Optional location and port:
 
 ```bash
-sudo bash install.sh --dir /opt/lte-sms-gateway --port 8080 --ref v3.1.0
+sudo bash install.sh --dir /opt/lte-sms-gateway --port 8080 --ref main
 ```
 
 Defaults: application `/opt/lte-sms-gateway`, dedicated Node.js `/opt/lte-sms-gateway-node`, service `lte-sms-gateway`. Existing application directories, dedicated runtimes and services are never overwritten; use the application's update page for existing installations. `bash install.sh --check` checks basic prerequisites and parameters without changing files.
@@ -112,7 +115,7 @@ sudo systemctl restart lte-sms-gateway
 Download assets from [GitHub Releases](https://github.com/JasonYANG170/LTE-SMS-Gateway/releases):
 
 - `LTE-SMS-Gateway-update.json`: import in Application update, or install after checking online updates.
-- `LTE-SMS-Gateway-v3.1.0.tar.gz`: source distribution for manual installation; not a UI update package.
+- `LTE-SMS-Gateway-v<version>.tar.gz`: source distribution for manual installation; not a UI update package.
 - `install.sh`: fresh-install script.
 - `SHA256SUMS.txt`: asset checksums; run `sha256sum -c SHA256SUMS.txt` alongside downloaded assets.
 

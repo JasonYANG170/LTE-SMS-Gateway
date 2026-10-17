@@ -3,12 +3,12 @@
 set -Eeuo pipefail
 INSTALL_DIR=/opt/lte-sms-gateway
 APP_PORT=5823
-APP_REF=v3.1.0
+APP_REF=main
 NODE_VERSION=v24.21.0
 SERVICE=lte-sms-gateway
 NODE_HOME=/opt/lte-sms-gateway-node
 usage() {
-  printf '%s\n' 'Usage: sudo bash install.sh [--dir /absolute/path] [--port 5823] [--ref v3.1.0] [--check]'
+  printf '%s\n' 'Usage: sudo bash install.sh [--dir /absolute/path] [--port 5823] [--ref main] [--check]'
 }
 CHECK_ONLY=0
 while (($#)); do
@@ -39,7 +39,7 @@ if systemctl cat "$SERVICE.service" >/dev/null 2>&1 || [[ -e "$NODE_HOME" ]]; th
 fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git xz-utils build-essential python3
+apt-get install -y openssl ca-certificates curl git xz-utils build-essential python3
 STAGE=$(mktemp -d /tmp/lte-gateway-install.XXXXXXXX)
 trap 'rm -rf -- "$STAGE"' EXIT
 NODE_ARCHIVE="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
@@ -64,6 +64,9 @@ printf '{"port":%d,"restartScript":"%s/scripts/restart-systemd.sh"}\n' "$((10#$A
 chown -R "$SERVICE:$SERVICE" "$INSTALL_DIR"
 chmod 0600 "$INSTALL_DIR/gateway-config.json"
 runuser -u "$SERVICE" -- env PATH="$NODE_HOME/bin:/usr/bin:/bin" bash -c 'cd "$1"; npm install --omit=dev' _ "$INSTALL_DIR"
+# Initialize a unique account before exposing the new service. Never use a default password.
+INITIAL_PASSWORD=$("$NODE_HOME/bin/node" -e 'process.stdout.write(require("crypto").randomBytes(24).toString("base64url"))')
+runuser -u "$SERVICE" -- env PATH="$NODE_HOME/bin:/usr/bin:/bin" GATEWAY_INITIAL_USERNAME=admin GATEWAY_INITIAL_PASSWORD="$INITIAL_PASSWORD" bash -c 'cd "$1"; npm run setup' _ "$INSTALL_DIR"
 cat > "/etc/systemd/system/$SERVICE.service" <<UNIT
 [Unit]
 Description=LTE SMS Gateway
@@ -87,7 +90,8 @@ systemctl enable --now "$SERVICE.service"
 for attempt in $(seq 1 30); do
   if curl --silent --fail "http://127.0.0.1:$((10#$APP_PORT))/login.html" >/dev/null; then
     printf 'Installed. Open http://<host>:%d/login.html\n' "$((10#$APP_PORT))"
-    printf '%s\n' 'Initial login: root / password. Change it in Settings after signing in.'
+    printf 'Initial username: admin\nInitial password (save privately): %s\n' "$INITIAL_PASSWORD"
+    unset INITIAL_PASSWORD
     exit 0
   fi
   sleep 1

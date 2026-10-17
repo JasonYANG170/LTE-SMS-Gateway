@@ -30,6 +30,8 @@ async function createFixture(options={}) {
   const workspace=createWorkspace(ctx);
   const app=express();app.use(express.json());
   const auth=(req,res,next)=>req.headers.cookie?.includes('test-auth=1')?next():res.status(401).json({success:false,error:'未授权'});
+  app.get('/api/security/csrf',(req,res)=>res.json({success:true,token:'synthetic-fixture-csrf'}));
+  app.get('/api/security/login-status',(req,res)=>res.json({success:true,locked:false}));
   app.post('/api/login',(req,res)=>{res.cookie('test-auth','1');res.json({success:true});});
   app.post('/api/logout',(req,res)=>res.json({success:true}));
   app.get('/api/keep-alive/:port',(req,res)=>res.json({success:true,config:{enabled:true,targetPhone:'+8613800000002',message:'保号',intervalDays:30,lastSentTime:Date.now()-31*86400000}}));

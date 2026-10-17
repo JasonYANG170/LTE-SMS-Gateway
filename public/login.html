@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <script src="security-client.js?v=1"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 · LTE & SMS Gateway</title>
@@ -25,13 +26,23 @@
           <div class="login-error" id="loginError" role="alert"></div>
           <div class="form-group"><label for="username">用户名</label><input type="text" id="username" name="username" required autocomplete="username" placeholder="输入用户名"></div>
           <div class="form-group"><label for="password">密码</label><input type="password" id="password" name="password" required autocomplete="current-password" placeholder="输入密码"></div>
+          <div class="form-group" id="totpGroup" hidden><label for="totpCode">验证器验证码或恢复码</label><input type="text" id="totpCode" autocomplete="one-time-code" maxlength="32"></div>
           <button type="submit" class="login-button">登录工作台</button>
-          <p class="login-version">LTE&SMS-Gateway · v3.1.0</p>
+          <p class="login-version">LTE&SMS-Gateway · v3.2.0</p>
         </form>
       </div>
     </main>
   </div>
   <script>
+    let loginLockedUntil=0,loginWaitTimer;
+    function setLoginWait(seconds) {
+      loginLockedUntil=Date.now()+seconds*1000;clearInterval(loginWaitTimer);
+      const tick=()=>{const remaining=Math.max(0,Math.ceil((loginLockedUntil-Date.now())/1000));const b=document.querySelector('.login-button'),e=document.getElementById('loginError');
+        b.disabled=remaining>0;b.textContent=remaining?'请等待 '+Math.floor(remaining/60)+':'+String(remaining%60).padStart(2,'0'):'登录工作台';
+        if(remaining){e.textContent='登录暂时锁定，剩余 '+Math.floor(remaining/60)+' 分 '+remaining%60+' 秒';e.classList.add('show');}else{clearInterval(loginWaitTimer);e.classList.remove('show');}};
+      tick();loginWaitTimer=setInterval(tick,1000);
+    }
+    fetch('/api/security/login-status').then(r=>r.json()).then(v=>{if(v.locked)setLoginWait(v.retryAfter);}).catch(()=>{});
     async function handleLogin(event) {
       event.preventDefault();
       
@@ -49,30 +60,31 @@
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ username, password })
+          body: JSON.stringify({ username, password, code:document.getElementById('totpCode').value.trim() })
         });
         
         const result = await response.json();
         
+        if(result.locked){setLoginWait(result.retryAfter);return;}
         if (result.success) {
           // 登录成功，跳转到主页
           window.location.href = '/';
         } else {
+          if(result.requiresTotp) {document.getElementById('totpGroup').hidden=false;document.getElementById('totpCode').focus();}
           // 显示错误信息
           errorDiv.textContent = window.GatewayI18n.t(result.error) || window.GatewayI18n.t('登录失败');
           errorDiv.classList.add('show');
           
           // 3秒后隐藏错误信息
           setTimeout(() => {
-            errorDiv.classList.remove('show');
+            if(Date.now()>=loginLockedUntil)errorDiv.classList.remove('show');
           }, 3000);
         }
       } catch (error) {
         errorDiv.textContent = window.GatewayI18n.t('网络错误，请重试');
         errorDiv.classList.add('show');
       } finally {
-        button.disabled = false;
-        button.textContent = window.GatewayI18n.t('登录工作台');
+        if(Date.now()>=loginLockedUntil){button.disabled = false;button.textContent = window.GatewayI18n.t('登录工作台');}
       }
     }
     const themeSelect = document.getElementById('themeSelect');

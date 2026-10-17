@@ -11,28 +11,21 @@ const app = express();
 const runtimeConfig = fs.existsSync(path.join(__dirname, 'gateway-config.json')) ? JSON.parse(fs.readFileSync(path.join(__dirname, 'gateway-config.json'), 'utf8')) : {};
 const PORT = Number(process.env.PORT || runtimeConfig.port || 5823);
 let workspace;
+let httpsManager;
+app.use((req,res,next)=>httpsManager?httpsManager.redirect(req,res,next):next());
 
-// 解析JSON请求体
-app.use(express.json());
-
-// 会话配置
-app.use(session({
-  secret: 'lte-gateway-secret-key-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: false, // 如果使用HTTPS，设置为true
-    maxAge: 24 * 60 * 60 * 1000 // 24小时
-  }
-}));
+// Deployment keys, authenticated sessions, CSRF, and TOTP.
+const securityModule = require('./security');
+const vault = securityModule.createCrypto(__dirname);
+app.use(express.json({limit:'100kb'}));
+const security = securityModule.installSecurity(app,{root:__dirname,runtimeConfig,vault});
 
 // 用户凭据文件路径
 const CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
 const LOGIN_LOG_FILE = path.join(__dirname, 'login.log');
 const NOTIFICATION_CONFIG_FILE = path.join(__dirname, 'notification.json');
 const MODULE_SETTINGS_FILE = path.join(__dirname, 'module-settings.json');
-const ENCRYPTION_KEY = crypto.scryptSync('lte-gateway-encryption-key', 'salt', 32);
-const IV_LENGTH = 16;
+
 
 // ========== 磁盘存储短信管理 ==========
 const DISK_SMS_DIR = path.join(__dirname, 'disk-sms');
@@ -241,41 +234,15 @@ async function autoClearSimSpace(portPath) {
   }
 }
 
-// 加密函数
-function encrypt(text) {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return iv.toString('hex') + ':' + encrypted;
-}
-
-// 解密函数
-function decrypt(text) {
-  try {
-    const parts = text.split(':');
-    const iv = Buffer.from(parts[0], 'hex');
-    const encryptedText = parts[1];
-    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (error) {
-    console.error('解密失败:', error.message);
-    return null;
-  }
-}
+// AES-GCM rejects modified ciphertext. Legacy data is migrated offline.
+const encrypt = vault.encrypt;
+const decrypt = vault.decrypt;
 
 // 初始化默认凭据
 async function initCredentials() {
   if (!fs.existsSync(CREDENTIALS_FILE)) {
-    const defaultPassword = await bcrypt.hash('password', 10);
-    const credentials = {
-      username: encrypt('root'),
-      password: defaultPassword
-    };
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
-    console.log('已创建默认凭据文件（已加密）');
+    console.error('Credentials missing. Restore the private deployment backup; refusing default credentials.');
+    process.exit(1);
   }
 }
 
@@ -326,19 +293,14 @@ async function saveCredentials(username, password) {
 initCredentials();
 
 // 获取客户端 IP 地址
-function getClientIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0] || 
-         req.headers['x-real-ip'] || 
-         req.connection.remoteAddress || 
-         req.socket.remoteAddress ||
-         'unknown';
-}
+function getClientIP(req) { return req.ip || req.socket.remoteAddress || 'unknown'; }
 
 // 记录登录日志
 function logLogin(ip, username, success, error = '') {
   const timestamp = new Date().toISOString();
   const status = success ? 'SUCCESS' : 'FAILED';
-  const logEntry = `[${timestamp}] IP: ${ip} | User: ${username} | Status: ${status}${error ? ` | Error: ${error}` : ''}\n`;
+  const clean = value => String(value || '').replace(/[\r\n\x00-\x1f]/g,' ').slice(0,200);
+  const logEntry = `[${timestamp}] IP: ${clean(ip)} | User: ${clean(username)} | Status: ${status}${error ? ` | Error: ${clean(error)}` : ''}\n`;
   
   try {
     fs.appendFileSync(LOGIN_LOG_FILE, logEntry);
@@ -356,7 +318,7 @@ function initNotificationConfig() {
       url: '',
       method: 'POST'
     };
-    fs.writeFileSync(NOTIFICATION_CONFIG_FILE, JSON.stringify(defaultConfig, null, 2));
+    fs.writeFileSync(NOTIFICATION_CONFIG_FILE, encrypt(JSON.stringify(defaultConfig)), {mode:0o600});
     console.log('已创建默认通知配置文件');
   }
 }
@@ -365,7 +327,7 @@ function initNotificationConfig() {
 function getNotificationConfig() {
   try {
     const data = fs.readFileSync(NOTIFICATION_CONFIG_FILE, 'utf8');
-    return JSON.parse(data);
+    return JSON.parse(decrypt(data));
   } catch (error) {
     console.error('读取通知配置失败:', error.message);
     return { enabled: false, url: '', method: 'POST' };
@@ -375,7 +337,7 @@ function getNotificationConfig() {
 // 保存通知配置
 function saveNotificationConfig(config) {
   try {
-    fs.writeFileSync(NOTIFICATION_CONFIG_FILE, JSON.stringify(config, null, 2));
+    fs.writeFileSync(NOTIFICATION_CONFIG_FILE, encrypt(JSON.stringify(config)), {mode:0o600});
     console.log('通知配置已更新');
     return true;
   } catch (error) {
@@ -527,7 +489,7 @@ async function sendLoginFailureNotification(ip, username, error) {
     // 替换 {login} 占位符
     let url = config.url.replace('{login}', encodeURIComponent(message));
     
-    console.log(`发送登录失败通知: ${url}`);
+  // Sensitive payload omitted from the process log.
     
     if (config.method === 'GET') {
       // GET 请求
@@ -595,7 +557,7 @@ async function sendStorageWarningNotification(portPath, storageInfo) {
         // 隐藏 URL 中的敏感信息（token）
         const urlObj = new URL(url);
         const safeUrl = `${urlObj.origin}${urlObj.pathname}${urlObj.searchParams.has('token') ? '?token=***' : ''}`;
-        console.log(`${portPath} HTTP转发存储警告: ${safeUrl}`);
+  // Sensitive payload omitted from the process log.
         
         if (settings.httpMethod === 'GET') {
           // GET请求
@@ -760,12 +722,7 @@ ensureDiskSmsDir();
 let autoClearSimConfig = getAutoClearSimConfig();
 
 // 认证中间件
-function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) {
-    return next();
-  }
-  res.status(401).json({ success: false, error: '未授权' });
-}
+const requireAuth = security.requireAuth;
 
 // 静态文件 - 登录页面不需要认证
 app.get('/login.html', (req, res) => {
@@ -778,7 +735,7 @@ app.get('/style.css', (req, res) => {
 
 // 主页需要认证
 app.get('/', (req, res) => {
-  if (req.session && req.session.authenticated) {
+  if (security.valid(req.session)) {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   } else {
     res.redirect('/login.html');
@@ -786,7 +743,11 @@ app.get('/', (req, res) => {
 });
 
 // 其他静态文件需要认证
-app.use(express.static('public', {
+app.use((req,res,next) => {
+  if(req.path.endsWith('.html') && req.path !== '/login.html' && !security.valid(req.session)) return res.redirect('/login.html');
+  next();
+});
+app.use(express.static(path.join(__dirname,'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html') && !filePath.endsWith('login.html')) {
       // HTML文件需要认证检查
@@ -796,7 +757,9 @@ app.use(express.static('public', {
 
 // 登录API
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  if(!security.limit(req,res)) return;
+  const { username, password, code } = req.body;
+  if(typeof username!=='string'||username.length>128||typeof password!=='string'||Buffer.byteLength(password)>72) return res.status(400).json({success:false,error:'登录字段无效'});
   const clientIP = getClientIP(req);
   const credentials = getCredentials();
   
@@ -811,6 +774,12 @@ app.post('/api/login', async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, credentials.passwordHash);
     
     if (usernameMatch && passwordMatch) {
+      if(security.readTotp().enabled && !code) return res.json({success:false,requiresTotp:true,error:'请输入验证器中的验证码或恢复码'});
+      if(!security.consumeTotp(code)) {if(!security.loginFailed(req,res,'totp'))return;return res.status(401).json({success:false,error:'验证码错误或已使用'});}
+      security.loginSucceeded(req);
+      await new Promise((resolve,reject)=>req.session.regenerate(e=>e?reject(e):resolve()));
+      req.session.authVersion = security.version();
+      req.session.csrf = crypto.randomBytes(32).toString('hex');
       req.session.authenticated = true;
       req.session.username = username;
       logLogin(clientIP, username, true);
@@ -820,26 +789,29 @@ app.post('/api/login', async (req, res) => {
       logLogin(clientIP, username, false, error);
       
       // 发送登录失败通知
-      await sendLoginFailureNotification(clientIP, username, error);
+      void sendLoginFailureNotification(clientIP, username, error).catch(()=>{});
       
+      if(!security.loginFailed(req,res))return;
       res.json({ success: false, error });
     }
   } catch (error) {
     console.error('登录验证失败:', error.message);
     logLogin(clientIP, username, false, error.message);
     res.json({ success: false, error: '登录失败，请重试' });
-  }
+  } finally {security.endLogin(req);}
 });
 
 // 退出登录API
 app.post('/api/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
+  req.session.destroy(()=>{res.clearCookie('gateway.sid',{httpOnly:true,sameSite:'strict'});res.json({success:true});});
 });
 
 // 更新凭据API
 app.post('/api/update-credentials', requireAuth, async (req, res) => {
-  const { username, password } = req.body;
+  if(!security.limit(req,res,'security'))return;
+  const { username, password, currentPassword, code } = req.body;
+  if((username && (typeof username!=='string'||username.length>128)) || (password && (typeof password!=='string'||password.length<12||Buffer.byteLength(password)>72)))return res.status(400).json({success:false,error:'新密码至少12个字符且不超过72字节'});
+  if(!await security.checkPassword(currentPassword)||!security.consumeTotp(code))return res.status(403).json({success:false,error:'当前密码或验证码错误'});
   
   try {
     const success = await saveCredentials(username, password);
@@ -911,7 +883,7 @@ app.post('/api/test-http-forward', requireAuth, async (req, res) => {
     const testMessage = '测试短信内容 - Test SMS Content';
     const testUrl = url.replace('{sms}', encodeURIComponent(testMessage));
     
-    console.log(`测试 HTTP 转发: ${method} ${testUrl}`);
+  // Sensitive payload omitted from the process log.
     
     const startTime = Date.now();
     let response;
@@ -994,7 +966,7 @@ app.post('/api/test-login-notification', requireAuth, async (req, res) => {
     const testMessage = '登录失败 - IP: 192.168.1.100, 用户名: testuser, 错误: 测试通知, 时间: ' + new Date().toISOString();
     const testUrl = url.replace('{login}', encodeURIComponent(testMessage));
     
-    console.log(`测试登录通知: ${method} ${testUrl}`);
+  // Sensitive payload omitted from the process log.
     
     const startTime = Date.now();
     let response;
@@ -1436,7 +1408,7 @@ function broadcastUpdate() {
   
   wsClients.forEach((ws, index) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(data);
+      security.sendSocket(ws,data);
       console.log(`已发送到客户端 ${index + 1}`);
     }
   });
@@ -1741,7 +1713,7 @@ async function forwardMessage(portPath, message) {
       // 隐藏 URL 中的敏感信息（token）
       const urlObj = new URL(url);
       const safeUrl = `${urlObj.origin}${urlObj.pathname}${urlObj.searchParams.has('token') ? '?token=***' : ''}`;
-      console.log(`${portPath} HTTP转发: ${safeUrl}`);
+  // Sensitive payload omitted from the process log.
       
       if (settings.httpMethod === 'GET') {
         // GET请求
@@ -1985,7 +1957,7 @@ function startPortListener(portPath) {
       buffer += rawData;
       
       // 实时打印接收到的原始数据
-      console.log(`[${portPath}] RAW: ${rawData.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}`);
+  // Sensitive payload omitted from the process log.
       
       // 检查是否有完整的行
       if (buffer.includes('\n')) {
@@ -2137,7 +2109,7 @@ function startPortListener(portPath) {
           }
           // 读取短信响应 - PDU数据
           else if (moduleStates[portPath].readingMessage && line.match(/^[0-9A-F]{20,}$/i)) {
-            console.log(`${portPath} 收到PDU数据: ${line.substring(0, 50)}...`);
+  // Sensitive payload omitted from the process log.
             
             const msgInfo = moduleStates[portPath].currentMessageInfo || {};
             
@@ -2160,7 +2132,7 @@ function startPortListener(portPath) {
               // 保存这一片段
               moduleStates[portPath].multipartMessages[key].parts[parsed.udh.partNum] = parsed.content;
               
-              console.log(`${portPath} 收到长短信片段 ${parsed.udh.partNum}/${parsed.udh.totalParts}, 内容: ${parsed.content?.substring(0, 20)}...`);
+  // Sensitive payload omitted from the process log.
               
               // 检查是否收集齐所有片段
               const multipart = moduleStates[portPath].multipartMessages[key];
@@ -2180,7 +2152,7 @@ function startPortListener(portPath) {
                 // 去重已关闭
                 const isDuplicate = false;
                 
-                console.log(`${portPath} 去重检查已关闭: isDuplicate=${isDuplicate}, phone=${multipart.phone}, contentLength=${fullContent.length}`);
+  // Sensitive payload omitted from the process log.
                 
                 if (!isDuplicate) {
                   // 保存完整短信
@@ -2237,7 +2209,7 @@ function startPortListener(portPath) {
                 };
                 
                 moduleStates[portPath].messages.push(message);
-                console.log(`${portPath} PDU短信已保存，来自: ${parsed.phone}, 内容: ${parsed.content?.substring(0, 20)}...`);
+  // Sensitive payload omitted from the process log.
                 
                 // 如果是未读短信，增加未读数
                 if (initStep === 0 && msgInfo.status === '0') {
@@ -2765,7 +2737,7 @@ async function sendMessageRaw(portPath, phone, message) {
           pduData = generatePDU(phone, message);
           const pduLength = (pduData.length / 2) - 1; // 减去 SMSC 长度字节
           
-          console.log(`${portPath} 发送PDU短信，号码: ${phone}, PDU长度: ${pduLength}, PDU: ${pduData}, 内容: ${message.substring(0, 20)}...`);
+  // Sensitive payload omitted from the process log.
           
           // 发送 AT+CMGS 命令
           serial.write(`AT+CMGS=${pduLength}\r\n`);
@@ -3032,7 +3004,7 @@ function startKeepAliveTask(portPath, config) {
     
     const intervalMs = intervalDays * 24 * 60 * 60 * 1000;
     
-    console.log(`${portPath} 启动保号任务: 每${intervalDays}天向${config.targetPhone}发送短信`);
+  // Sensitive payload omitted from the process log.
     
     // 检查上次发送时间，计算下次发送的延迟
     const now = Date.now();
@@ -3167,7 +3139,7 @@ async function sendKeepAliveSMS(portPath, config) {
     return;
   }
   
-  console.log(`${portPath} 发送保号短信到: ${config.targetPhone}`);
+  // Sensitive payload omitted from the process log.
   
   const result = await sendMessage(portPath, config.targetPhone, config.message, 'keep-alive');
   
@@ -3420,6 +3392,7 @@ workspace = require('./gateway-workspace').createWorkspace({
   root: __dirname, modules: moduleStates, serial: serialConnections, diskDir: DISK_SMS_DIR,
   encrypt, decrypt, loadDiskMessages, saveDiskMessages, sendMessage, sendCommand,
   isSending: port => Boolean(sendMessageLocks[port]), broadcast: broadcastUpdate,
+  allowWebUpgrade:true, authorizeMaintenance:security.authorizeMaintenance,
   canRestart: Boolean(runtimeConfig.restartScript && fs.existsSync(runtimeConfig.restartScript)),
   restart: () => {
     const helper = require('child_process').spawn('/bin/bash', [runtimeConfig.restartScript, String(process.pid)], {detached:true,stdio:'ignore'});
@@ -3428,7 +3401,7 @@ workspace = require('./gateway-workspace').createWorkspace({
   },
 });
 workspace.register(app, requireAuth);
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, runtimeConfig.bindHost || '::', () => {
   console.log(`服务器运行在 http://localhost:${PORT}`);
   // 初始化模块监听
   initializeModuleListeners();
@@ -3439,7 +3412,10 @@ const server = app.listen(PORT, () => {
 });
 
 // WebSocket服务器（用于实时更新）
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ noServer:true, maxPayload:1024, perMessageDeflate:false });
+security.attachWebSocket(server,wss);
+httpsManager=require('./https-manager').createHttpsManager({app,vault,security,runtimeConfig,httpPort:PORT,attach:instance=>security.attachWebSocket(instance,wss)});
+httpsManager.start();
 
 wss.on('connection', (ws) => {
   console.log('客户端已连接');
@@ -3447,13 +3423,12 @@ wss.on('connection', (ws) => {
   
   // 立即发送当前状态
   const initialData = JSON.stringify(Object.values(moduleStates));
-  console.log('发送初始状态给新客户端:', initialData);
-  ws.send(initialData);
+  security.sendSocket(ws,initialData);
   
   // 处理客户端消息
   ws.on('message', (message) => {
     if (message.toString() === 'ping') {
-      ws.send('pong');
+      security.sendSocket(ws,'pong');
     }
   });
   

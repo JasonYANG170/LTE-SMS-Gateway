@@ -7,10 +7,11 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const run = promisify(execFile);
 const { QUERIES, parseResponse, identifiers } = require('./sim-parser');
-const VERSION = '3.1.0';
+const VERSION = '3.2.0';
+const githubUpdates=require('./github-updates');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const messageId = (port, message, iccid = '') => hash(JSON.stringify([iccid || port, message.pdu || '', message.phone || '', message.time || '', message.content || '']));
-const UPDATE_FILES = ['gateway-workspace.js','sim-parser.js','server.js','public/style.css','public/studio.css','public/mail-workspace.css','public/theme.js','public/i18n.js','public/workspace.js','public/mail-workspace.js','public/app.js','public/login.html','public/index.html'];
+const UPDATE_FILES = ['security.js','https-manager.js','github-updates.js','package.json','package-lock.json','public/security-client.js','public/management-client.js','gateway-workspace.js','sim-parser.js','server.js','public/style.css','public/studio.css','public/mail-workspace.css','public/theme.js','public/i18n.js','public/workspace.js','public/mail-workspace.js','public/app.js','public/login.html','public/index.html'];
 
 function createWorkspace(ctx) {
   const root = ctx.root;
@@ -18,6 +19,7 @@ function createWorkspace(ctx) {
   const dirs = Object.fromEntries(['backups','snapshots','logs','uploads'].map(k => [k,path.join(dataDir,k)]));
   for (const dir of [dataDir,...Object.values(dirs)]) fs.mkdirSync(dir,{recursive:true,mode:0o700});
   const dbFile = path.join(dataDir,'mail-state.enc');
+  const currentVersion=()=>{try{const v=fs.readFileSync(path.join(dataDir,'ui-version'),'utf8').trim();return githubUpdates.newer(v,VERSION)?v:VERSION;}catch{return VERSION;}};
   let db = { meta:{}, simCards:{}, simNumbers:{}, outbox:[], schedules:[], upgrade:{ state:'idle' } };
   if (fs.existsSync(dbFile)) { const raw=ctx.decrypt(fs.readFileSync(dbFile,'utf8')); if (!raw) throw new Error('工作台数据解密失败'); db={...db,...JSON.parse(raw)}; }
   for(const job of db.schedules) if(job.state==='sending') {job.state='uncertain';job.error='服务在发送期间重启，请核对发件记录，避免重复发送';}
@@ -63,7 +65,7 @@ function createWorkspace(ctx) {
     try {
       const file=logPath(port);
       if(fs.existsSync(file) && fs.statSync(file).size>8*1024*1024) { fs.rmSync(file+'.1',{force:true}); fs.renameSync(file,file+'.1'); }
-      fs.appendFileSync(file,JSON.stringify({port,type,data:String(data),time:new Date().toISOString()})+'\n',{mode:0o600});
+      fs.appendFileSync(file,ctx.encrypt(JSON.stringify({port,type,data:String(data),time:new Date().toISOString()}))+'\n',{mode:0o600});
     } catch(e) { console.error('工作台日志写入失败:',e.message); }
   }
   function recordSent(port,phone,content,result,source='manual') {
@@ -129,7 +131,7 @@ function createWorkspace(ctx) {
   const logBuffer=[];
   function tailLogs(port) {
     const file=logPath(port);if(!fs.existsSync(file))return [];
-    const fd=fs.openSync(file,'r');try {const size=fs.fstatSync(fd).size;const count=Math.min(size,256*1024);const buffer=Buffer.alloc(count);fs.readSync(fd,buffer,0,count,size-count);return buffer.toString().split('\n').filter(Boolean).flatMap(line=>{try{return [JSON.parse(line)];}catch{return [];}}).slice(-1000);}finally{fs.closeSync(fd);}
+    const fd=fs.openSync(file,'r');try {const size=fs.fstatSync(fd).size;const count=Math.min(size,256*1024);const buffer=Buffer.alloc(count);fs.readSync(fd,buffer,0,count,size-count);return buffer.toString().split('\n').filter(Boolean).flatMap(line=>{try{return [JSON.parse(ctx.decrypt(line))];}catch{return [];}}).slice(-1000);}finally{fs.closeSync(fd);}
   }
   function backupContent() { return {format:'lte-sms-backup',schema:1,created:new Date().toISOString(),messages:allMail(),outbox:db.outbox,meta:db.meta}; }
   function snapshot(label) {const name=Date.now()+'-'+crypto.randomUUID()+'.enc';writeEncrypted(path.join(dirs.snapshots,name),{...backupContent(),label});return name;}
@@ -249,14 +251,20 @@ function createWorkspace(ctx) {
         const current=deploymentStats(item.id);if(current.stamp!==item.stamp){skipped.push(item.id);continue;}fs.rmSync(file,{recursive:true});freed+=current.size;removed.push(item.id);continue;
       }
       if(!['backups','snapshots','logs','uploads'].includes(item.kind)||! /^[\w.-]+$/.test(item.id))fail('清理标识无效');const file=path.join(dirs[item.kind],item.id);if(!fs.existsSync(file))continue;const stat=fs.lstatSync(file);if(stat.isSymbolicLink()||!stat.isFile()||stat.mtimeMs!==item.stamp||item.kind==='logs'&&!item.id.endsWith('.1')||item.kind==='uploads'&&uploads.get(item.id)?.busy||item.kind==='snapshots'&&(restoreBusy||upgradeBusy)){skipped.push(item.id);continue;}freed+=stat.size;fs.unlinkSync(file);uploads.delete(item.id);removed.push(item.id);}res.json({success:true,freed,removed,skipped});});
-    get('/upgrade',(req,res)=>res.json({success:true,current:fs.existsSync(path.join(dataDir,'ui-version'))?fs.readFileSync(path.join(dataDir,'ui-version'),'utf8').trim():VERSION,backend:VERSION,task:db.upgrade,source:'JasonYANG170/LTE-SMS-Gateway',packageFormat:'lte-sms-ui-update',canRestart:Boolean(ctx.canRestart)}));
+    get('/upgrade',(req,res)=>res.json({success:true,current:currentVersion(),backend:VERSION,task:db.upgrade,source:'JasonYANG170/LTE-SMS-Gateway',packageFormat:'lte-sms-ui-update',canRestart:Boolean(ctx.canRestart)}));
     post('/upgrade/check',async(req,res)=>{
-      const response=await fetch('https://api.github.com/repos/JasonYANG170/LTE-SMS-Gateway/releases/latest',{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
-      if(response.status===404)return res.json({success:true,available:false,note:'更新源暂无正式 Release，可使用本地工作台升级包。'});
-      if(!response.ok)fail('更新源暂时不可用');const release=await response.json();const asset=release.assets?.find(a=>a.name==='LTE-SMS-Gateway-update.json');res.json({success:true,version:release.tag_name,url:release.html_url,available:Boolean(asset),note:asset?'找到兼容升级包':'该 Release 未包含兼容的工作台升级包',asset:asset?.browser_download_url});
+      const release=await githubUpdates.latest(ctx.updateFetch);
+      if(!release)return res.json({success:true,available:false,note:'官方仓库暂无正式发布版本'});
+      const current=currentVersion();
+      let available=false,note='官方发布版本不高于当前安装版本，无需更新';
+      if(githubUpdates.newer(release.tag_name,current)&&githubUpdates.newer(release.tag_name,VERSION)){try{githubUpdates.assetOf(release);available=true;note='找到带GitHub摘要的官方升级包';}catch(e){note=e.message;}}
+      res.json({success:true,version:release.tag_name,url:'https://github.com/'+githubUpdates.REPOSITORY+'/releases',available,note});
     });
     async function installBundle(bundle) {
       if(upgradeBusy||restoreBusy||restartPending)fail('存在运行中的维护任务');
+      if(!githubUpdates.newer(bundle?.version,VERSION))fail('拒绝安装旧版本或重复版本');
+      const installed=fs.existsSync(path.join(dataDir,'ui-version'))?fs.readFileSync(path.join(dataDir,'ui-version'),'utf8').trim():VERSION;
+      if(!githubUpdates.newer(bundle.version,installed))fail('拒绝降级');
       if(bundle?.format!=='lte-sms-ui-update'||!/^\d+\.\d+\.\d+$/.test(bundle.version)||!Array.isArray(bundle.files)||!bundle.files.length)fail('升级包格式无效');
       const seen=new Set();let bytes=0;
       for(const item of bundle.files){if(!UPDATE_FILES.includes(item.path)||seen.has(item.path)||typeof item.content!=='string'||hash(Buffer.from(item.content,'base64'))!==item.sha256)fail('升级文件路径或 SHA-256 校验失败');seen.add(item.path);bytes+=Buffer.from(item.content,'base64').length;}
@@ -264,7 +272,9 @@ function createWorkspace(ctx) {
       if(!bundle.files.find(f=>f.path==='public/index.html')||!bundle.files.some(f=>f.path==='public/mail-workspace.js'))fail('缺少工作台入口');
       const backend=bundle.files.some(f=>!f.path.startsWith('public/'));
       if(backend&&!ctx.canRestart)fail('当前部署尚未配置服务重启入口，不能安装含后端的升级包');
-      if(backend&&['server.js','gateway-workspace.js','sim-parser.js'].some(file=>!seen.has(file)))fail('后端升级文件不完整');
+      if(backend&&UPDATE_FILES.some(file=>!seen.has(file)))fail('后端升级文件不完整');
+      if(backend){const next=JSON.parse(Buffer.from(bundle.files.find(f=>f.path==='package.json').content,'base64'));const local=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8'));const canonical=value=>JSON.stringify(Object.entries(value||{}).sort());if(canonical(next.dependencies)!==canonical(local.dependencies)||canonical(next.optionalDependencies)!==canonical(local.optionalDependencies))fail('依赖发生变化，请由服务器管理员安装该更新');}
+      for(const item of bundle.files){const file=path.join(root,item.path);if(fs.existsSync(file)&&fs.lstatSync(file).isSymbolicLink()||fs.lstatSync(path.dirname(file)).isSymbolicLink())fail('升级目标包含符号链接');}
       if(queryLocks.size||Object.keys(ctx.modules).some(ctx.isSending))fail('模块正在执行任务，请稍后升级');
       upgradeBusy=true;
       let staging;
@@ -281,13 +291,12 @@ function createWorkspace(ctx) {
       return {...db.upgrade,restart:backend};
     }
     post('/upgrade/install',async(req,res)=>{
-      let bundle;
-      if(req.body.source==='online') {
-        const release=await fetch('https://api.github.com/repos/JasonYANG170/LTE-SMS-Gateway/releases/latest',{signal:AbortSignal.timeout(15000)}).then(r=>r.json());
-        const asset=release.assets?.find(a=>a.name==='LTE-SMS-Gateway-update.json');if(!asset)fail('更新源没有兼容升级包');
-        const url=new URL(asset.browser_download_url);if(url.protocol!=='https:'||url.hostname!=='github.com'||!url.pathname.startsWith('/JasonYANG170/LTE-SMS-Gateway/releases/download/'))fail('升级来源无效');
-        const response=await fetch(url,{signal:AbortSignal.timeout(60000)});if(!response.ok)fail('升级包下载失败');let bytes=0,chunks=[];for await(const chunk of response.body){bytes+=chunk.length;if(bytes>48*1024*1024)fail('升级包过大');chunks.push(Buffer.from(chunk));}bundle=JSON.parse(Buffer.concat(chunks).toString());
-      } else {const upload=getUpload(req.body.upload);if(upload.offset!==upload.size||upload.busy)fail('上传未完成');bundle=JSON.parse(await fsp.readFile(upload.file,'utf8'));}
+      if(!ctx.allowWebUpgrade||!ctx.authorizeMaintenance)fail('当前部署不支持安全更新',403);
+      if(!await ctx.authorizeMaintenance(req,res))return;
+      if(req.body.source!=='online')fail('仅允许通过官方GitHub发布源安装',403);
+      const release=await githubUpdates.latest(ctx.updateFetch);if(!release)fail('官方仓库暂无正式发布');
+      if(req.body.version!==release.tag_name)fail('发布版本发生变化，请重新检查更新',409);
+      const bundle=await githubUpdates.download(release,ctx.updateFetch);
       const task=await installBundle(bundle);res.json({success:true,task});if(task.restart)ctx.restart();
     });
   }

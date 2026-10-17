@@ -16,6 +16,17 @@
 </div>
 
 
+## 3.2 安全更新
+
+当前安全版本请从 `main` 源码部署；旧版 Release 附件不会自动更新为新代码。新装运行 `npm ci --omit=dev`、`npm run setup` 后启动，账号密码不再预设。
+
+- 系统设置支持 TOTP 扫码绑定、一次性恢复码、登录错误等待策略和登录失败 IP 记录。
+- 系统设置支持 HTTPS 端口、HTTP 跳转、PEM 证书链/私钥导入、自签名证书生成、证书信息/到期时间、证书热更换和恢复上一证书。生成自签证书需要 OpenSSL；浏览器信任由访问设备自行配置。私钥导入仅允许 HTTPS 或本机 SSH 隧道。
+- GitHub 更新仅接受本仓库正式 Release 的 `LTE-SMS-Gateway-update.json`，必须带 GitHub 计算的 SHA-256 摘要。安装要求密码及已启用的 2FA，并保存快照；拒绝本地未验证包、降级和依赖变更。依赖有变化时使用服务器端部署。
+- 公开部署需要有效的 HTTPS 证书、适当的防火墙配置和独立服务用户；HTTPS 管理不会自动开放系统防火墙端口。
+
+旧版升级、证书管理及更新发布说明见 [安全部署指南](docs/security.md)。
+
 ## 功能
 - ✅支持SMS-on-HTTPS转发，可将SMS内容转发至微信或邮箱
 - ✅支持SMS-on-SIM转发，可将SMS内容转发至常用SIM中
@@ -46,12 +57,13 @@ https://github.com/JasonYANG170/LTE-SMS-Gateway
 ```bash
 git clone https://github.com/JasonYANG170/LTE-SMS-Gateway.git
 cd LTE-SMS-Gateway
-git checkout v3.1.0
-npm install --omit=dev
+git checkout main
+npm ci --omit=dev
+npm run setup
 npm start
 ```
 
-打开 `http://<主机IP>:5823/login.html`。首次登录为 `root / password`，登录后在“系统设置”中修改账号和密码。自定义端口可以使用 `PORT=8080 npm start`，或创建不提交到 Git 的 `gateway-config.json`：
+打开 `http://<主机IP>:5823/login.html`。首次启动前运行 `npm run setup` 创建账号及至少 12 字符的密码；不再提供默认密码。已有部署请先备份并按下方迁移说明操作。自定义端口可以使用 `PORT=8080 npm start`，或创建不提交到 Git 的 `gateway-config.json`：
 
 ```json
 {"port":5823}
@@ -89,14 +101,14 @@ sudo systemctl enable --now lte-sms-gateway
 适用于运行 systemd 的 Debian / Ubuntu，支持 x86_64 和 aarch64 / arm64。首次执行需要 `curl` 和 sudo / root 权限。脚本自动安装系统依赖，从 Node.js 官方下载 Node.js 24.21.0 并校验 SHA-256，部署指定版本，配置串口权限和 systemd 开机自启动。
 
 ```bash
-curl -fL https://github.com/JasonYANG170/LTE-SMS-Gateway/releases/download/v3.1.0/install.sh -o install.sh
+curl -fL https://raw.githubusercontent.com/JasonYANG170/LTE-SMS-Gateway/main/scripts/install.sh -o install.sh
 sudo bash install.sh
 ```
 
 可选安装位置和端口：
 
 ```bash
-sudo bash install.sh --dir /opt/lte-sms-gateway --port 8080 --ref v3.1.0
+sudo bash install.sh --dir /opt/lte-sms-gateway --port 8080 --ref main
 ```
 
 默认安装路径 `/opt/lte-sms-gateway`，专用 Node.js 路径 `/opt/lte-sms-gateway-node`，服务名 `lte-sms-gateway`。脚本不替换系统原有 Node.js；已有目标目录、专用运行时或同名服务时拒绝覆盖，旧部署请使用网页升级功能。`bash install.sh --check` 仅检查基础环境和参数，不安装或修改文件。
@@ -112,7 +124,7 @@ sudo systemctl restart lte-sms-gateway
 在 [GitHub Releases](https://github.com/JasonYANG170/LTE-SMS-Gateway/releases) 下载：
 
 - `LTE-SMS-Gateway-update.json`：工作台升级包，在侧边栏“应用升级”中本地导入，或通过在线检查更新安装。
-- `LTE-SMS-Gateway-v3.1.0.tar.gz`：源码部署包，适用于手动安装；不是网页升级包。
+- `LTE-SMS-Gateway-v<version>.tar.gz`：源码部署包，适用于手动安装；不是网页升级包。
 - `install.sh`：一键部署脚本。
 - `SHA256SUMS.txt`：上述附件的完整性校验值；在下载目录执行 `sha256sum -c SHA256SUMS.txt`。
 

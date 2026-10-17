@@ -32,7 +32,7 @@ window.GatewayI18n = (() => {
  "导出、保存与恢复短信档案。": "Export, save and restore message archives.",
  "管理主机快照、备份与": "Manage host snapshots, backups and",
  "短信存储。": "message storage.",
- "检查更新或导入工作台升级包。": "Check for updates or import an update package.",
+ "从官方 GitHub 检查更新并验证发布文件。": "Check for updates or import an update package.",
  "管理登录凭据、通知与界面偏好。": "Manage credentials, notifications and preferences.",
  "全部": "All",
  "筛选": "Filter",

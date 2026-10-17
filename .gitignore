@@ -1,5 +1,4 @@
 node_modules/
-package-lock.json
 .DS_Store
 *.log
 credentials.json
@@ -36,3 +35,11 @@ docs/screenshots/*
 !docs/screenshots/outbox.png
 !docs/screenshots/overview-dark.png
 !docs/screenshots/mobile.png
+
+# Never publish deployment keys, certificates or audit/backup data.
+.security/
+*.crt
+*.csr
+*.p7b
+*.tgz
+*.zip
