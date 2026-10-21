@@ -9,6 +9,10 @@ try {
  await page.goto(fixture.origin);await page.waitForFunction(()=>document.getElementById('totalModules').textContent==='2');
  await page.waitForFunction(()=>document.getElementById('navUnread').textContent==='1');
  const go=async view=>{await page.locator(`[data-view="${view}"]`).click();await page.waitForFunction(view=>window.MailWorkspace.state.view===view && (view==='all'||document.querySelector('#featurePage .ws-panel')||document.querySelector('#featurePage .ws-sim-grid')),view);};
+ await page.locator('#modulesGrid [data-action="refresh-module"]').first().click();
+ await page.waitForFunction(()=>document.getElementById('workspaceNotice').textContent.includes('刷新完成'));
+ assert.ok(fixture.modules['/dev/ttyACM0'].lastRefreshed);
+ fixture.workspace.recordLog('/dev/ttyACM0','receive','UI log regression');
  await page.locator('#themeSelect').selectOption('dark');
  await go('unread');await page.locator('[data-message]').waitFor();assert.equal(await page.locator('#featurePage .module-card').count(),0);assert.match(await page.locator('#mailRows').textContent(),/测试来信/);
  await page.waitForFunction(()=>window.MailWorkspace.state.mail.messages[0].recipientPhone==='+8613800000000');assert.match(await page.locator('#mailRows').textContent(),/\+8613800000000/);await page.locator('[data-favorite]').click();await page.waitForFunction(()=>window.MailWorkspace.state.mail.messages[0].favorite);

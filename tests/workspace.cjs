@@ -31,6 +31,24 @@ const {parseResponse,identifiers}=require('../sim-parser');
     const scheduled=await request('/api/workspace/schedule',{port:'/dev/ttyACM0',phone:'+8613800000000',content:'测试到期',due:Date.now()+20});await new Promise(r=>setTimeout(r,30));await workspace.tick();await workspace.tick();
     const mailbox=(await request('/api/workspace/mail')).data;assert.equal(mailbox.schedules.find(j=>j.id===scheduled.data.job.id).state,'sent');assert.equal(mailbox.outbox.length,1);
     workspace.recordLog('/dev/ttyACM0','receive','OK');assert.equal((await request('/api/workspace/logs')).data.logs.length,1);
+    const logFile=path.join(fixture.root,'workspace-data/logs',require('crypto').createHash('sha256').update('/dev/ttyACM0').digest('hex')+'.jsonl');
+    const validLog={port:'/dev/ttyACM0',time:new Date().toISOString(),type:'receive',data:'valid after corrupt records'};
+    fs.appendFileSync(logFile,['null','{}','[]',JSON.stringify({...validLog,time:'bad'}),JSON.stringify({...validLog,data:null})].map(fixture.ctx.encrypt).join('\n')+'\ncorrupt encrypted line\n'+fixture.ctx.encrypt(JSON.stringify(validLog))+'\n');
+    result=await request('/api/workspace/logs');assert.equal(result.status,200);assert.equal(result.data.logs.length,2);
+    // Production decrypt returns null for authentication failures; JSON.parse(null) used to leak null into sorting.
+    const originalDecrypt=fixture.ctx.decrypt;fixture.ctx.decrypt=value=>value==='corrupt encrypted line'?null:originalDecrypt(value);
+    assert.equal((await request('/api/workspace/logs')).data.logs.length,2);fixture.ctx.decrypt=originalDecrypt;
+    // A tail read that begins inside an encrypted row must retain subsequent valid rows.
+    fs.writeFileSync(logFile,fixture.ctx.encrypt(JSON.stringify({...validLog,data:'x'.repeat(150000)}))+'\n'+fixture.ctx.encrypt(JSON.stringify(validLog))+'\ntruncated-final-row');
+    result=await request('/api/workspace/logs');assert.equal(result.status,200);assert.equal(result.data.logs.length,1);assert.equal(result.data.logs[0].data,validLog.data);
+    fs.writeFileSync(logFile,fixture.ctx.encrypt(JSON.stringify(validLog))+'\n');
+    const refreshPath='/api/workspace/modules/ttyACM0/refresh';
+    assert.equal((await fetch(origin+refreshPath,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
+    workspace.queryLocks.add('/dev/ttyACM0');assert.equal((await request(refreshPath,{})).status,409);workspace.queryLocks.delete('/dev/ttyACM0');
+    result=await request(refreshPath,{});assert.equal(result.status,200);assert.equal(result.data.action,'refreshed');assert.equal(result.data.module.status,'ok');assert.equal(result.data.module.signalQuality.rssi,22);assert.equal(workspace.queryLocks.size,0);
+    const commands=fixture.ctx.serial['/dev/ttyACM0'].commands;assert.ok(!commands.some(command=>/CMGD|CMGS|CMGL/.test(command)));
+    let reconnected='';fixture.ctx.reconnect=async port=>{reconnected=port;fixture.modules[port].status='reconnecting';};
+    result=await request('/api/workspace/modules/ttyACM1/refresh',{});assert.equal(result.data.action,'reconnect');assert.equal(reconnected,'/dev/ttyACM1');assert.equal((await request('/api/workspace/modules/ttyACM1/refresh',{})).status,409);fixture.modules['/dev/ttyACM1'].status='no_sim';
     const sim=await request('/api/workspace/sim/ttyACM0');assert.equal(sim.data.details.phone,'+8613800000000');assert.equal((await request('/api/workspace/mail')).data.messages[0].recipientPhone,'+8613800000000');const count=fixture.ctx.serial['/dev/ttyACM0'].commands.length;await request('/api/workspace/sim/ttyACM0');assert.equal(fixture.ctx.serial['/dev/ttyACM0'].commands.length,count);assert.equal(sim.data.details.imsi,'460001234567890');assert.equal(sim.data.details.fields.find(f=>f.key==='storage').value[0].total,50);
     assert.equal((await request('/api/workspace/sim/ttyACM0/number',{iccid:'wrong',phone:'+8613900000000'})).status,400);assert.equal((await request('/api/workspace/sim/ttyACM0/number',{iccid:fixture.modules['/dev/ttyACM0'].iccid,phone:'bad'})).status,400);assert.equal((await request('/api/workspace/sim/ttyACM0/number',{iccid:fixture.modules['/dev/ttyACM0'].iccid,phone:'+8613900000000'})).status,200);
     assert.equal(parseResponse('lteRegistration','+CEREG: 2,1,"abcd","1234"\r\nOK').meaning,'已注册（本地）');

@@ -1856,6 +1856,7 @@ function initializeNextPort() {
 
 // 标记端口初始化完成，继续下一个
 function markPortInitialized(portPath) {
+  if(initializationQueue[currentInitializingPortIndex]!==portPath)return;
   console.log(`>>> ${portPath} 初始化完成 <<<\n`);
   currentInitializingPortIndex++;
   
@@ -1885,6 +1886,7 @@ function startPortListener(portPath) {
     let buffer = '';
     let initStep = 0;
     let commandTimeout = null;
+    let listenerActive=true;
     let retryCount = {}; // 记录每个步骤的重试次数
 
     // 命令超时处理函数
@@ -1899,12 +1901,15 @@ function startPortListener(portPath) {
       }
       
       commandTimeout = setTimeout(() => {
+        if(!listenerActive||serialConnections[portPath]!==serial||!serial.isOpen)return;
         retryCount[step]++;
         
         if (retryCount[step] >= 5) {
           console.log(`${portPath} 步骤 ${step} 重试超过 5 次，放弃初始化`);
           addCommandHistory(portPath, 'error', `步骤 ${step} 超时重试 5 次失败`);
           
+          moduleStates[portPath].lastError=`初始化指令 ${nextCommand||'AT'} 未应答，重试5次后已停止；请检查模组供电、接线与波特率`;
+          initStep=0;clearTimeout(commandTimeout);
           // 关闭串口
           if (serial && serial.isOpen) {
             serial.close();
@@ -1932,6 +1937,7 @@ function startPortListener(portPath) {
       if (err) {
         console.error(`无法打开 ${portPath}:`, err.message);
         moduleStates[portPath].status = 'error';
+        moduleStates[portPath].lastError=err.message;
         broadcastUpdate();
         
         // 标记此端口初始化完成（失败），继续下一个
@@ -1941,6 +1947,7 @@ function startPortListener(portPath) {
 
       console.log(`${portPath} 已打开，开始初始化...`);
       serialConnections[portPath] = serial;
+      moduleStates[portPath].lastError='';
 
       // 初始化序列 - 延长等待时间
       setTimeout(() => {
@@ -2520,8 +2527,10 @@ function startPortListener(portPath) {
 
     serial.on('close', () => {
       console.log(`${portPath} 已关闭`);
-      delete serialConnections[portPath];
-      
+      listenerActive=false;clearTimeout(commandTimeout);
+      if(serialConnections[portPath]===serial)delete serialConnections[portPath];
+      if(!moduleStates[portPath].lastError)moduleStates[portPath].lastError='串口连接已关闭，可点击刷新重新连接';
+      moduleStates[portPath].status='error';broadcastUpdate();
       // 如果是在初始化过程中关闭，标记为错误并继续下一个
       if (initStep > 0) {
         moduleStates[portPath].status = 'error';
@@ -2532,6 +2541,7 @@ function startPortListener(portPath) {
 
     serial.on('error', (err) => {
       console.error(`${portPath} 错误:`, err.message);
+      moduleStates[portPath].lastError=err.message;broadcastUpdate();
       addCommandHistory(portPath, 'error', err.message);
     });
 
@@ -3322,75 +3332,21 @@ app.post('/api/keep-alive-stop-all', requireAuth, (req, res) => {
 });
 
 // 重连模块API
-app.post('/api/reconnect/:port', requireAuth, async (req, res) => {
-  const portPath = `/dev/${req.params.port}`;
-  
-  if (!moduleStates[portPath]) {
-    return res.json({ success: false, error: '模块不存在' });
-  }
-  
-  console.log(`手动重连 ${portPath}`);
-  
-  try {
-    // 关闭现有连接
-    const serial = serialConnections[portPath];
-    if (serial && serial.isOpen) {
-      serial.close();
-      delete serialConnections[portPath];
-    }
-    
-    // 重置模块状态
-    moduleStates[portPath] = {
-      port: portPath,
-      status: 'reconnecting',
-      iccid: '',
-      imei: '',
-      moduleDetected: false,
-      simDetected: false,
-      unreadCount: 0,
-      messages: [],
-      pendingMessages: [],
-      readingMessage: false,
-      commandHistory: [],
-      operatorInfo: {
-        mode: null,
-        format: null,
-        oper: null,
-        act: null
-      },
-      signalQuality: {
-        rssi: null,
-        ber: null
-      },
-      forwardSettings: moduleStates[portPath].forwardSettings || {
-        httpEnabled: false,
-        httpUrl: '',
-        httpMethod: 'GET',
-        smsEnabled: false,
-        smsTarget: ''
-      },
-      multipartMessages: {}
-    };
-    
-    // 广播更新
-    broadcastUpdate();
-    
-    // 延迟2秒后重新启动监听
-    setTimeout(() => {
-      startPortListener(portPath);
-    }, 2000);
-    
-    res.json({ success: true, message: '正在重连...' });
-  } catch (error) {
-    console.error(`重连 ${portPath} 失败:`, error.message);
-    res.json({ success: false, error: error.message });
-  }
+async function reconnectModule(portPath) {
+  if(!moduleStates[portPath])throw Object.assign(Error('模块不存在'),{status:404});
+  if(workspace?.isMaintaining()||workspace?.queryLocks.has(portPath)||sendMessageLocks[portPath]||['initializing','reconnecting'].includes(moduleStates[portPath].status))throw Object.assign(Error('模块正在执行任务，请稍后重试'),{status:409});
+  const serial=serialConnections[portPath];if(serial?.isOpen)await new Promise((resolve,reject)=>serial.close(e=>e?reject(e):resolve()));
+  moduleStates[portPath]={...moduleStates[portPath],status:'reconnecting',lastError:'',moduleDetected:false,simDetected:false};
+  broadcastUpdate();setTimeout(()=>startPortListener(portPath),200);
+}
+app.post('/api/reconnect/:port',requireAuth,async(req,res)=>{
+  try{await reconnectModule('/dev/'+req.params.port);res.json({success:true,message:'正在重连，请等待模块应答'});}catch(e){res.status(e.status||400).json({success:false,error:e.message});}
 });
 
 // 启动HTTP服务器
 workspace = require('./gateway-workspace').createWorkspace({
   root: __dirname, modules: moduleStates, serial: serialConnections, diskDir: DISK_SMS_DIR,
-  encrypt, decrypt, loadDiskMessages, saveDiskMessages, sendMessage, sendCommand,
+  encrypt, decrypt, loadDiskMessages, saveDiskMessages, sendMessage, sendCommand, reconnect:reconnectModule,
   isSending: port => Boolean(sendMessageLocks[port]), broadcast: broadcastUpdate,
   allowWebUpgrade:true, authorizeMaintenance:security.authorizeMaintenance,
   canRestart: Boolean(runtimeConfig.restartScript && fs.existsSync(runtimeConfig.restartScript)),

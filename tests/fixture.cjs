@@ -39,6 +39,7 @@ async function createFixture(options={}) {
   app.get('/api/login-logs',(req,res)=>res.json({success:true,logs:'测试登录日志'}));
   app.post('/api/send',async(req,res)=>res.json(await ctx.sendMessage(req.body.port,req.body.phone,req.body.message)));
   for(const endpoint of ['/api/settings','/api/notification-config','/api/update-credentials','/api/keep-alive/:port','/api/auto-clear-sim/:port'])app.post(endpoint,(req,res)=>res.json({success:true}));
+  app.get('/api/modules',auth,(req,res)=>res.json(Object.values(modules)));
   workspace.register(app,auth);
   app.use(express.static(path.join(root,'public')));
   const server=await new Promise(resolve=>{const instance=app.listen(0,'127.0.0.1',()=>resolve(instance));});

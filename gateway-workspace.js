@@ -102,9 +102,7 @@ function createWorkspace(ctx) {
       if(!stopped && ctx.modules[port].iccid===card){details.set(port,result);if(iccid){db.simCards[iccid]=result;persist();}ctx.broadcast();}
       return result;
     } finally {
-      queryLocks.delete(port);
-      const deferred=deferredCommands.get(port)||[];deferredCommands.delete(port);
-      deferred.forEach((command,index)=>setTimeout(()=>ctx.sendCommand?.(port,command),index*1000));
+      releaseQuery(port);
     }
   }
   function inspectSim(port) {
@@ -131,7 +129,30 @@ function createWorkspace(ctx) {
   const logBuffer=[];
   function tailLogs(port) {
     const file=logPath(port);if(!fs.existsSync(file))return [];
-    const fd=fs.openSync(file,'r');try {const size=fs.fstatSync(fd).size;const count=Math.min(size,256*1024);const buffer=Buffer.alloc(count);fs.readSync(fd,buffer,0,count,size-count);return buffer.toString().split('\n').filter(Boolean).flatMap(line=>{try{return [JSON.parse(ctx.decrypt(line))];}catch{return [];}}).slice(-1000);}finally{fs.closeSync(fd);}
+    const fd=fs.openSync(file,'r');
+    try {
+      const size=fs.fstatSync(fd).size,count=Math.min(size,256*1024),offset=size-count,buffer=Buffer.alloc(count);
+      fs.readSync(fd,buffer,0,count,offset);const lines=buffer.toString('utf8').split('\n');
+      if(offset>0){const previous=Buffer.alloc(1);fs.readSync(fd,previous,0,1,offset-1);if(previous[0]!==10)lines.shift();}
+      return lines.filter(Boolean).flatMap(line=>{try{const plain=ctx.decrypt(line);if(typeof plain!=='string')return [];const row=JSON.parse(plain);if(!row||Array.isArray(row)||typeof row.time!=='string'||!Number.isFinite(Date.parse(row.time))||['port','type','data'].some(key=>typeof row[key]!=='string'))return [];return [row];}catch{return [];}}).slice(-1000);
+    } finally {fs.closeSync(fd);}
+  }
+  function releaseQuery(port) {
+    queryLocks.delete(port);const deferred=deferredCommands.get(port)||[];deferredCommands.delete(port);
+    deferred.forEach((command,index)=>setTimeout(()=>ctx.sendCommand?.(port,command),index*1000));
+  }
+  async function refreshModule(port) {
+    if(restoreBusy||upgradeBusy||restartPending||queryLocks.has(port)||ctx.isSending(port)||['initializing','reconnecting'].includes(ctx.modules[port].status))fail('模块正在执行任务，请稍后刷新',409);
+    if(!ctx.serial[port]?.isOpen){if(!ctx.reconnect)fail('串口未连接，请检查模块供电与串口接线',503);await ctx.reconnect(port);return {action:'reconnect',module:ctx.modules[port]};}
+    const mod=ctx.modules[port];queryLocks.add(port);
+    try {
+      const alive=await query(port,'AT');if(alive.state!=='ok')fail('模块未响应 AT 指令，请检查模组供电、接线与波特率',504);
+      const pin=await query(port,'AT+CPIN?');if(pin.state==='ok'){const state=parseResponse('pin',pin.raw);mod.simDetected=state==='READY';mod.status=mod.simDetected?'ok':'no_sim';}
+      const signal=await query(port,'AT+CSQ');if(signal.state==='ok'){const value=parseResponse('signal',signal.raw);if(value)mod.signalQuality={rssi:value.rssi,ber:value.ber};}
+      const operator=await query(port,'AT+COPS?');const match=operator.raw.match(/\+COPS:\s*(\d+)(?:,(\d+),"([^"]*)"(?:,(\d+))?)?/);if(match)mod.operatorInfo={mode:+match[1],format:match[2]?+match[2]:null,oper:match[3]||null,act:match[4]?+match[4]:null};
+      const storage=await query(port,'AT+CPMS?');if(storage.state==='ok'){const capacity=parseResponse('storage',storage.raw)[0];if(capacity)mod.storageInfo={used:capacity.used,total:capacity.total,percentage:capacity.total?Math.round(100*capacity.used/capacity.total):0};}
+      mod.moduleDetected=true;mod.lastError='';mod.lastRefreshed=new Date().toISOString();ctx.broadcast();return {action:'refreshed',module:mod};
+    }catch(e){mod.lastError=e.message;mod.status='error';ctx.broadcast();throw e;}finally{releaseQuery(port);}
   }
   function backupContent() { return {format:'lte-sms-backup',schema:1,created:new Date().toISOString(),messages:allMail(),outbox:db.outbox,meta:db.meta}; }
   function snapshot(label) {const name=Date.now()+'-'+crypto.randomUUID()+'.enc';writeEncrypted(path.join(dirs.snapshots,name),{...backupContent(),label});return name;}
@@ -218,6 +239,7 @@ function createWorkspace(ctx) {
   function register(app,auth) {
     const get=(url,fn)=>app.get('/api/workspace'+url,auth,route(fn));
     const post=(url,fn)=>app.post('/api/workspace'+url,auth,route(fn));
+    post('/modules/:port/refresh',async(req,res)=>res.json({success:true,...await refreshModule(portOf(req.params.port))}));
     get('/mail',(req,res)=>{autoSim();res.json({success:true,messages:allMail(),outbox:db.outbox,schedules:db.schedules});});
     post('/mail/meta',(req,res)=>{const {id,read,favorite}=req.body;if(!allMail().some(m=>m.id===id))fail('短信不存在');db.meta[id]={...db.meta[id],...(typeof read==='boolean'?{read}:{}),...(typeof favorite==='boolean'?{favorite}:{})};persist();res.json({success:true});});
     post('/mail/read-all',(req,res)=>{for(const m of allMail()) if(!req.body.port||m.port===req.body.port)db.meta[m.id]={...db.meta[m.id],read:true};persist();res.json({success:true});});

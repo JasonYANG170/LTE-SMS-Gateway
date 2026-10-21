@@ -1,6 +1,9 @@
 /* Translate only UI source literals. SMS content and raw responses are never traversed. */
 window.GatewayI18n = (() => {
  const dictionary={
+ "刷新模块": "Refresh module",
+ "已请求重连，等待模块响应": "Reconnect requested; waiting for module response",
+ "刷新完成": "Refresh complete",
  "网关概览": "Gateway overview",
  "设备信息": "Device information",
  "卡概览": "card overview",
