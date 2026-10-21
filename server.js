@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+const {normalize:normalizePhone}=require('./public/phone');
 const app = express();
 const runtimeConfig = fs.existsSync(path.join(__dirname, 'gateway-config.json')) ? JSON.parse(fs.readFileSync(path.join(__dirname, 'gateway-config.json'), 'utf8')) : {};
 const PORT = Number(process.env.PORT || runtimeConfig.port || 5823);
@@ -1403,7 +1404,7 @@ function broadcastUpdate() {
     module.autoClearSimThreshold = getAutoClearSimThreshold(module.port, acConfig);
   });
   
-  const data = JSON.stringify(modules);
+  const data = JSON.stringify(workspace?modules.map(workspace.moduleInfo):modules);
   console.log(`广播更新到 ${wsClients.length} 个客户端，模块数量: ${modules.length}`);
   
   wsClients.forEach((ws, index) => {
@@ -2693,6 +2694,9 @@ function generatePDU(phone, message) {
 
 // 发送短信
 async function sendMessage(portPath, phone, message, source = 'manual') {
+  try{phone=normalizePhone(phone);}catch(e){return {success:false,error:e.message};}
+  if(!moduleStates[portPath])return {success:false,error:'模块不存在'};
+  if(typeof message!=='string'||!message.trim()||message.length>70)return {success:false,error:'请输入 1–70 字短信内容'};
   if (workspace?.isMaintaining()) return {success:false,error:'维护任务正在运行，请稍后发送'};
   if (workspace?.queryLocks.has(portPath)) return { success: false, error: '正在读取 SIM 详情，请稍后发送' };
   const result = await sendMessageRaw(portPath, phone, message);
@@ -2874,7 +2878,7 @@ async function deleteAllMessages(portPath) {
 
 // API端点
 app.get('/api/modules', requireAuth, async (req, res) => {
-  res.json(Object.values(moduleStates));
+  res.json(workspace.getModules());
 });
 
 // 获取指定模块的消息（合并SIM和磁盘消息）
@@ -2949,7 +2953,8 @@ app.post('/api/clear-unread/:port', requireAuth, async (req, res) => {
 
 // 发送短信
 app.post('/api/send', requireAuth, async (req, res) => {
-  const { port, phone, message } = req.body;
+  const { port, message } = req.body;
+  let phone;try{phone=normalizePhone(req.body.phone,req.body.callingCode||'');}catch(e){return res.status(400).json({success:false,error:e.message});}
   const result = await sendMessage(port, phone, message);
   res.json(result);
 });
@@ -3378,7 +3383,7 @@ wss.on('connection', (ws) => {
   wsClients.push(ws);
   
   // 立即发送当前状态
-  const initialData = JSON.stringify(Object.values(moduleStates));
+  const initialData = JSON.stringify(workspace.getModules());
   security.sendSocket(ws,initialData);
   
   // 处理客户端消息

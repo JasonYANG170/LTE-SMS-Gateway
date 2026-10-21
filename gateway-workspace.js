@@ -7,11 +7,12 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const run = promisify(execFile);
 const { QUERIES, parseResponse, identifiers } = require('./sim-parser');
+const {normalize:normalizePhone}=require('./public/phone');
 const VERSION = '3.2.0';
 const githubUpdates=require('./github-updates');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const messageId = (port, message, iccid = '') => hash(JSON.stringify([iccid || port, message.pdu || '', message.phone || '', message.time || '', message.content || '']));
-const UPDATE_FILES = ['security.js','https-manager.js','github-updates.js','package.json','package-lock.json','public/security-client.js','public/management-client.js','gateway-workspace.js','sim-parser.js','server.js','public/style.css','public/studio.css','public/mail-workspace.css','public/theme.js','public/i18n.js','public/workspace.js','public/mail-workspace.js','public/app.js','public/login.html','public/index.html'];
+const UPDATE_FILES = ['public/phone.js','security.js','https-manager.js','github-updates.js','package.json','package-lock.json','public/security-client.js','public/management-client.js','gateway-workspace.js','sim-parser.js','server.js','public/style.css','public/studio.css','public/mail-workspace.css','public/theme.js','public/i18n.js','public/workspace.js','public/mail-workspace.js','public/app.js','public/login.html','public/index.html'];
 
 function createWorkspace(ctx) {
   const root = ctx.root;
@@ -20,7 +21,7 @@ function createWorkspace(ctx) {
   for (const dir of [dataDir,...Object.values(dirs)]) fs.mkdirSync(dir,{recursive:true,mode:0o700});
   const dbFile = path.join(dataDir,'mail-state.enc');
   const currentVersion=()=>{try{const v=fs.readFileSync(path.join(dataDir,'ui-version'),'utf8').trim();return githubUpdates.newer(v,VERSION)?v:VERSION;}catch{return VERSION;}};
-  let db = { meta:{}, simCards:{}, simNumbers:{}, outbox:[], schedules:[], upgrade:{ state:'idle' } };
+  let db = { meta:{}, simCards:{}, simNumbers:{}, portNumbers:{}, outbox:[], schedules:[], upgrade:{ state:'idle' } };
   if (fs.existsSync(dbFile)) { const raw=ctx.decrypt(fs.readFileSync(dbFile,'utf8')); if (!raw) throw new Error('工作台数据解密失败'); db={...db,...JSON.parse(raw)}; }
   for(const job of db.schedules) if(job.state==='sending') {job.state='uncertain';job.error='服务在发送期间重启，请核对发件记录，避免重复发送';}
   if(db.upgrade.state==='running') db.upgrade={...db.upgrade,state:'interrupted',error:'服务中断，请检查快照后重新导入'};
@@ -43,6 +44,20 @@ function createWorkspace(ctx) {
   const portOf = value => { const port = value?.startsWith('/dev/') ? value : '/dev/'+value; if(!ctx.modules[port]) fail('模块不存在'); return port; };
   const readEncrypted = file => { const plain=ctx.decrypt(fs.readFileSync(file,'utf8'));if(!plain) fail('文件解密失败');return JSON.parse(plain); };
   const writeEncrypted = (file,value) => {const temp=file+'.tmp';fs.writeFileSync(temp,ctx.encrypt(JSON.stringify(value)),{mode:0o600});fs.renameSync(temp,file);};
+  function moduleInfo(mod) {
+    const card=mod.iccid;
+    if(card&&db.portNumbers[mod.port]){if(!db.simNumbers[card])db.simNumbers[card]=db.portNumbers[mod.port];delete db.portNumbers[mod.port];persist();}
+    const configuredPhone=(card?db.simNumbers[card]:db.portNumbers[mod.port])||'';
+    return {...mod,configuredPhone,phoneNumber:configuredPhone||(card?db.simCards[card]?.phone:'')||''};
+  }
+  const getModules=()=>Object.values(ctx.modules).map(moduleInfo);
+  function saveNumber(req,res) {
+    const port=portOf(req.params.port),card=ctx.modules[port].iccid||'';
+    if(String(req.body.iccid||'')!==card)fail('SIM 已变更，请刷新后重试');
+    const raw=String(req.body.phone||'').trim(),phone=raw?normalizePhone(raw):'';
+    if(card)db.simNumbers[card]=phone;else db.portNumbers[port]=phone;
+    persist();ctx.broadcast();res.json({success:true,module:moduleInfo(ctx.modules[port])});
+  }
   function allMail() {
     const result=[],seen=new Set();
     const ports=new Set(Object.keys(ctx.modules));
@@ -55,7 +70,7 @@ function createWorkspace(ctx) {
         const meta=db.meta[id] || {};
         const unread=meta.read!==undefined ? !meta.read : ['0','REC UNREAD'].includes(String(message.status));
         const card=message.simIccid || mod.iccid || '';
-        const recipientPhone=message.recipientPhone || db.simCards[card]?.phone || db.simNumbers[card] || '';
+        const recipientPhone=message.recipientPhone || db.simNumbers[card] || db.simCards[card]?.phone || '';
         result.push({...message,recipientPhone,id,port,iccid:message.simIccid || mod.iccid || '',operator:mod.operatorInfo?.oper || '',unread,favorite:Boolean(meta.favorite)});
       }
     }
@@ -244,12 +259,13 @@ function createWorkspace(ctx) {
     post('/mail/meta',(req,res)=>{const {id,read,favorite}=req.body;if(!allMail().some(m=>m.id===id))fail('短信不存在');db.meta[id]={...db.meta[id],...(typeof read==='boolean'?{read}:{}),...(typeof favorite==='boolean'?{favorite}:{})};persist();res.json({success:true});});
     post('/mail/read-all',(req,res)=>{for(const m of allMail()) if(!req.body.port||m.port===req.body.port)db.meta[m.id]={...db.meta[m.id],read:true};persist();res.json({success:true});});
     get('/device',async(req,res)=>res.json({success:true,...await deviceInfo()}));
-    get('/sim/:port',async(req,res)=>{const port=portOf(req.params.port),mod=ctx.modules[port];let detail=cachedSim(port);if(mod.status==='ok'&&mod.iccid&&(!detail||Date.now()-new Date(detail.time).getTime()>15*60*1000))detail=await inspectSim(port);res.json({success:true,module:mod,details:detail?{...detail,autoPhone:detail.phone,phone:detail.phone||db.simNumbers[mod.iccid]||''}:null,configuredPhone:db.simNumbers[mod.iccid]||'',identifiers:identifiers(mod.iccid)});});
-    post('/sim/:port/number',(req,res)=>{const port=portOf(req.params.port),card=ctx.modules[port].iccid,phone=String(req.body.phone||'').trim();if(!card||req.body.iccid!==card)fail('SIM 已变更，请刷新后重试');if(phone&&!/^\+?\d{3,20}$/.test(phone))fail('请输入有效手机号');db.simNumbers[card]=phone;persist();ctx.broadcast();res.json({success:true});});
+    get('/sim/:port',async(req,res)=>{const port=portOf(req.params.port),mod=ctx.modules[port];let detail=cachedSim(port);if(mod.status==='ok'&&mod.iccid&&(!detail||Date.now()-new Date(detail.time).getTime()>15*60*1000))detail=await inspectSim(port);res.json({success:true,module:moduleInfo(mod),details:detail?{...detail,autoPhone:detail.phone,phone:db.simNumbers[mod.iccid]||detail.phone||''}:null,configuredPhone:db.simNumbers[mod.iccid]||'',identifiers:identifiers(mod.iccid)});});
+    post('/sim/:port/number',saveNumber);
+    post('/modules/:port/number',saveNumber);
     post('/sim/:port/inspect',async(req,res)=>res.json({success:true,details:await inspectSim(portOf(req.params.port))}));
     get('/logs',(req,res)=>{const ports=req.query.port?[portOf(req.query.port)]:Object.keys(ctx.modules);res.json({success:true,logs:ports.flatMap(tailLogs).sort((a,b)=>a.time.localeCompare(b.time))});});
     post('/logs/clear',(req,res)=>{const port=portOf(req.body.port);fs.writeFileSync(logPath(port),'',{mode:0o600});ctx.modules[port].commandHistory=[];res.json({success:true});});
-    post('/schedule',(req,res)=>{const {port,phone,content,due}=req.body;portOf(port);if(!/^\+?\d{3,20}$/.test(phone)||typeof content!=='string'||!content.trim()||content.length>70)fail('请输入有效号码与 1–70 字的定时短信');if(!Number.isFinite(due)||due<=Date.now())fail('发送时间必须在未来');if(db.schedules.filter(j=>j.state==='queued').length>=1000)fail('待发送任务过多');const job={id:crypto.randomUUID(),port,iccid:ctx.modules[port].iccid||'',phone,content,due,state:'queued',created:new Date().toISOString()};db.schedules.push(job);persist();res.json({success:true,job});});
+    post('/schedule',(req,res)=>{const {port,content,due}=req.body;const phone=normalizePhone(req.body.phone,req.body.callingCode||'');portOf(port);if(typeof content!=='string'||!content.trim()||content.length>70)fail('请输入有效号码与 1–70 字的定时短信');if(!Number.isFinite(due)||due<=Date.now())fail('发送时间必须在未来');if(db.schedules.filter(j=>j.state==='queued').length>=1000)fail('待发送任务过多');const job={id:crypto.randomUUID(),port,iccid:ctx.modules[port].iccid||'',phone,content,due,state:'queued',created:new Date().toISOString()};db.schedules.push(job);persist();res.json({success:true,job});});
     post('/schedule/:id/cancel',(req,res)=>{const job=db.schedules.find(j=>j.id===req.params.id);if(!job||job.state!=='queued')fail('只能取消等待中的任务');job.state='cancelled';persist();res.json({success:true});});
     get('/backup/download',async(req,res)=>streamBackup(res,backupContent()));
     post('/backup',(req,res)=>{const id=Date.now()+'-'+crypto.randomUUID()+'.enc';writeEncrypted(path.join(dirs.backups,id),backupContent());res.json({success:true,id});});
@@ -323,6 +339,6 @@ function createWorkspace(ctx) {
     });
   }
   function deferCommand(port,command) {const list=deferredCommands.get(port)||[];if(!list.includes(command))list.push(command);deferredCommands.set(port,list);}
-  return {register,recordLog,recordSent,queryLocks,deferCommand,allMail,snapshot,tick,isMaintaining:()=>upgradeBusy||restoreBusy||restartPending,close:()=>{stopped=true;clearInterval(timer);clearInterval(simTimer);},parseBackup,restoreText,deviceInfo};
+  return {getModules,moduleInfo,register,recordLog,recordSent,queryLocks,deferCommand,allMail,snapshot,tick,isMaintaining:()=>upgradeBusy||restoreBusy||restartPending,close:()=>{stopped=true;clearInterval(timer);clearInterval(simTimer);},parseBackup,restoreText,deviceInfo};
 }
 module.exports={createWorkspace,messageId,VERSION,UPDATE_FILES};

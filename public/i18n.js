@@ -1,6 +1,15 @@
 /* Translate only UI source literals. SMS content and raw responses are never traversed. */
 window.GatewayI18n = (() => {
  const dictionary={
+ "搜索手机号、串口或运营商": "Search phone, port or carrier",
+ "备注手机号": "SIM phone label",
+ "地区 / 区号": "Region / calling code",
+ "直接输入完整号码 / 本地号码": "Enter full / local number directly",
+ "实际收件号码": "Recipient number",
+ "选择地区后输入当地号码，或直接输入 +区号-号码；以 + 开头时优先使用输入的区号。": "Choose a region and enter the local number, or enter +calling-code-number. A leading + overrides the region.",
+ "备注号码加密保存在主机，优先用于卡片和下拉列表显示；留空可清除备注。": "The label is encrypted on the host and shown first on cards and selectors. Leave blank to clear.",
+ "中国大陆": "Mainland China", "中国香港": "Hong Kong", "中国澳门": "Macao", "中国台湾": "Taiwan", "新加坡": "Singapore", "马来西亚": "Malaysia", "美国 / 加拿大": "US / Canada", "英国": "UK", "日本": "Japan", "韩国": "South Korea", "澳大利亚": "Australia", "德国": "Germany", "法国": "France", "俄罗斯 / 哈萨克斯坦": "Russia / Kazakhstan", "印度": "India", "泰国": "Thailand", "越南": "Vietnam", "菲律宾": "Philippines", "印度尼西亚": "Indonesia",
+
  "刷新模块": "Refresh module",
  "已请求重连，等待模块响应": "Reconnect requested; waiting for module response",
  "刷新完成": "Refresh complete",

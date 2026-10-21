@@ -39,12 +39,12 @@ async function createFixture(options={}) {
   app.get('/api/login-logs',(req,res)=>res.json({success:true,logs:'测试登录日志'}));
   app.post('/api/send',async(req,res)=>res.json(await ctx.sendMessage(req.body.port,req.body.phone,req.body.message)));
   for(const endpoint of ['/api/settings','/api/notification-config','/api/update-credentials','/api/keep-alive/:port','/api/auto-clear-sim/:port'])app.post(endpoint,(req,res)=>res.json({success:true}));
-  app.get('/api/modules',auth,(req,res)=>res.json(Object.values(modules)));
+  app.get('/api/modules',auth,(req,res)=>res.json(workspace.getModules()));
   workspace.register(app,auth);
   app.use(express.static(path.join(root,'public')));
   const server=await new Promise(resolve=>{const instance=app.listen(0,'127.0.0.1',()=>resolve(instance));});
   const wss=new WebSocketServer({server});
-  wss.on('connection',ws=>ws.send(JSON.stringify(Object.values(modules))));
+  wss.on('connection',ws=>ws.send(JSON.stringify(workspace.getModules())));
   const origin=`http://127.0.0.1:${server.address().port}`;
   const request=async(url,body,headers={})=>{const response=await fetch(origin+url,{headers:{Cookie:'test-auth=1',...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)})});return {status:response.status,data:await response.json()};};
   return {root,modules,workspace,ctx,origin,request,close:async()=>{workspace.close();for(const client of wss.clients)client.terminate();await new Promise(resolve=>server.close(resolve));fs.rmSync(root,{recursive:true,force:true});}};

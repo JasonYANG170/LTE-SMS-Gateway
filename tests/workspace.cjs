@@ -24,6 +24,16 @@ const {parseResponse,identifiers}=require('../sim-parser');
     assert.equal((await request('/api/workspace/restore',{upload:token})).data.restored,0);
     const before=(await request('/api/workspace/mail')).data.messages.length;
     await assert.rejects(workspace.restoreText('bad backup'),/JSON|Unexpected/);assert.equal((await request('/api/workspace/mail')).data.messages.length,before);
+    const normalize=require('../public/phone').normalize;
+    assert.equal(normalize('+65-8123-4567'),'+6581234567');assert.equal(normalize('81234567','+65'),'+6581234567');assert.equal(normalize('+44-7700900123','+86'),'+447700900123');assert.equal(normalize('10086'),'10086');
+    for(const invalid of ['+65;AT+CMGS=1','+65\r\nAT','++6581234567','+012345','+1234567890123456','abc'])assert.throws(()=>normalize(invalid));
+    const international=await request('/api/workspace/schedule',{port:'/dev/ttyACM0',phone:'+65-81234567',content:'international fixture',due:Date.now()+3600000});assert.equal(international.data.job.phone,'+6581234567');await request('/api/workspace/schedule/'+international.data.job.id+'/cancel',{});
+    const regional=await request('/api/workspace/schedule',{port:'/dev/ttyACM0',phone:'81234567',callingCode:'+65',content:'regional fixture',due:Date.now()+3600000});assert.equal(regional.data.job.phone,'+6581234567');await request('/api/workspace/schedule/'+regional.data.job.id+'/cancel',{});
+    assert.equal((await request('/api/workspace/modules/ttyACM1/number',{iccid:'',phone:'+65-81234567'})).status,200);
+    assert.equal(fixture.workspace.getModules()[1].phoneNumber,'+6581234567');
+    fixture.modules['/dev/ttyACM1'].iccid='fixture-card-a';assert.equal(fixture.workspace.getModules()[1].configuredPhone,'+6581234567');
+    fixture.modules['/dev/ttyACM1'].iccid='fixture-card-b';assert.equal(fixture.workspace.getModules()[1].configuredPhone,'');
+    assert.equal((await request('/api/workspace/modules/ttyACM1/number',{iccid:'fixture-card-a',phone:'+6581111111'})).status,400);fixture.modules['/dev/ttyACM1'].iccid='';
     const job=await request('/api/workspace/schedule',{port:'/dev/ttyACM0',phone:'+8613800000000',content:'定时测试',due:Date.now()+60000});assert.equal(job.data.job.state,'queued');
     await request('/api/workspace/schedule/'+job.data.job.id+'/cancel',{});assert.equal((await request('/api/workspace/mail')).data.schedules[0].state,'cancelled');
     assert.equal((await request('/api/workspace/schedule',{port:'/dev/ttyACM0',phone:'bad',content:'测试',due:Date.now()+60000})).status,400);
@@ -77,7 +87,7 @@ const {parseResponse,identifiers}=require('../sim-parser');
     assert.equal((await sendUpdate(bundle)).status,400);
     const {createWorkspace}=require('../gateway-workspace');
     const statePath=path.join(fixture.root,'workspace-data/mail-state.enc');const state=JSON.parse(fixture.ctx.decrypt(fs.readFileSync(statePath,'utf8')));state.schedules[0].state='sending';fs.writeFileSync(statePath,fixture.ctx.encrypt(JSON.stringify(state)));
-    const reloaded=createWorkspace(fixture.ctx);try{assert.equal(reloaded.allMail()[0].favorite,true);assert.equal(reloaded.allMail()[0].recipientPhone,'+8613800000000');fixture.modules['/dev/ttyACM0'].iccid='8986019999999999999';assert.equal(reloaded.allMail().find(m=>m.storageLocation==='sim').recipientPhone,'');const decoded=JSON.parse(fixture.ctx.decrypt(fs.readFileSync(statePath,'utf8')));assert.equal(decoded.schedules[0].state,'uncertain');}finally{reloaded.close();}
+    const reloaded=createWorkspace(fixture.ctx);try{assert.equal(reloaded.allMail()[0].favorite,true);assert.equal(reloaded.allMail()[0].recipientPhone,'+8613900000000');fixture.modules['/dev/ttyACM0'].iccid='8986019999999999999';assert.equal(reloaded.allMail().find(m=>m.storageLocation==='sim').recipientPhone,'');const decoded=JSON.parse(fixture.ctx.decrypt(fs.readFileSync(statePath,'utf8')));assert.equal(decoded.schedules[0].state,'uncertain');}finally{reloaded.close();}
     console.log('Workspace API checks passed: auth, metadata, streaming backup, restore validation/deduplication, uploads, scheduler, SIM parsing, logs, cache protections, host telemetry.');
   } finally {await fixture.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

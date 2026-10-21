@@ -45,7 +45,8 @@ async function wsStatus(headers,url=base.replace('http:','ws:'),options={}){retu
  assert.equal((await request('/api/security/login-policy',{maxFailures:2,lockMinutes:1,password:'Fixture-password-very-long'})).v.success,true);
  assert.equal((await request('/api/security/login-policy')).v.maxFailures,2);
  assert.equal((await request('/api/modules')).r.status,200);assert.equal(await wsStatus({Origin:base,Cookie:cookie}),101);
- assert.equal((await request('/api/workspace/upgrade/install',{})).r.status,403);
+ assert.equal((await request('/api/send',{port:'/dev/ttyACM0',phone:'+65;AT',message:'test'})).r.status,400);
+   assert.equal((await request('/api/workspace/upgrade/install',{})).r.status,403);
  assert.equal((await request('/api/logout',{}, {Origin:'https://evil.example'})).r.status,403);
  assert.equal((await request('/api/update-credentials',{username:'hijacked'})).r.status,403);
  const setup=(await request('/api/security/totp/setup',{password:'Fixture-password-very-long'})).v;assert.ok(setup.qr.startsWith('data:image/png;base64,'));

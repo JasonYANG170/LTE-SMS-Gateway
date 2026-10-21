@@ -27,7 +27,16 @@ try {
  }
  await page.locator('#accountUser').fill('draft-survives');await page.evaluate(()=>updateModules(window.modulesData));assert.equal(await page.locator('#accountUser').inputValue(),'draft-survives');
  await go('sim-details');assert.equal(await page.locator('[data-action="inspect-sim"]').count(),0);await page.waitForFunction(()=>document.getElementById('featurePage').textContent.includes('460001234567890'));assert.match(await page.locator('#featurePage').textContent(),/\+8613800000000/);assert.equal(await page.locator('#featurePage').getByText('短信服务',{exact:true}).count(),0);
+ await page.locator('#simPhone').fill('+65-81234567');await page.locator('[data-form="sim-number"] [type="submit"]').click();
+ await page.waitForFunction(()=>document.getElementById('workspaceNotice').textContent.includes('SIM 号码已保存'));
+ assert.match(await page.locator('#pagePort option').first().textContent(),/^\+6581234567/);
+ await go('all');assert.match(await page.locator('#modulesGrid .module-title').first().textContent(),/^\+6581234567/);
  await go('outbox');await page.locator('#sendPhone').waitFor();
+ await page.locator('#sendRegion').selectOption('+65');await page.locator('#sendPhone').fill('81234567');assert.match(await page.locator('#recipientPreview').textContent(),/\+6581234567/);
+ await page.locator('#sendPhone').fill('+44-7700900123');assert.match(await page.locator('#recipientPreview').textContent(),/\+447700900123/);
+ await page.locator('#sendContent').fill('scheduled international test');await page.locator('#scheduled').check();
+ const due=new Date(Date.now()+3600000);const localDue=new Date(due.getTime()-due.getTimezoneOffset()*60000).toISOString().slice(0,16);await page.locator('#sendDue').fill(localDue);
+ await page.locator('[data-form="compose"] [type="submit"]').click();await page.waitForFunction(()=>window.MailWorkspace.state.mail.schedules.some(j=>j.phone==='+447700900123'));
  for(const theme of ['light','dark']) {await page.locator('#themeSelect').selectOption(theme);const colors=await page.locator('.keep-alive-status.sending').evaluate(el=>({bg:getComputedStyle(el).backgroundColor,fg:getComputedStyle(el.querySelector('.keep-alive-days')).color}));assert.notEqual(colors.bg,colors.fg);}
  await go('inbox');await page.locator('[data-message]').waitFor();await page.locator('[data-message]').click();await page.screenshot({path:'docs/workspace-mail.png',fullPage:true});
  await go('all');await page.screenshot({path:'docs/workspace-overview.png',fullPage:true});

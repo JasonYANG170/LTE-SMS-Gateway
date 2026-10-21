@@ -88,3 +88,5 @@ progress::-webkit-progress-value { background:var(--primary); }
 .topbar { gap: 14px; flex-wrap: wrap; }
 .login-language { position: fixed; right: 190px; top: 24px; z-index: 10; }
 @media(max-width:600px){.topbar .breadcrumb{width:100%;}.login-language{right:auto;left:20px;}.language-control{margin-left:0;}}
+
+.module-title { overflow-wrap:anywhere; }
